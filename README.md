@@ -14,31 +14,40 @@
 - 自動輪詢；連線失敗或資料過期時顯示錯誤，恢復後自動更新。
 - 英文及繁體中文介面。
 
+## 畫面
+
+以下是實際執行中的 Homarr 截圖，僅擷取可公開的介面區域；VM 名稱、ID、連線設定與 token 未包含在圖片中。
+
+![Host CPU 與 RAM](docs/screenshots/host-metrics.png)
+
+![自訂 Host 名稱與 widget 選項](docs/screenshots/widget-settings.png)
+
 ## 架構
 
 ```text
 Hyper-V host                         Homarr server
-PowerShell agent ── HTTPS + token ──> Hyper-V integration ──> Hyper-V widget
+Go agent ───────── HTTPS + token ──> Hyper-V integration ──> Hyper-V widget
   Get-VM + local CIM                   authenticated polling
 ```
 
 箭頭表示資料流；連線由 Homarr 發起。Agent 只有 `GET /api/v1/snapshot`，不提供啟停 VM 或遠端執行指令。
 
-**Agent 目前是 Windows PowerShell 5.1，不是 Go，也沒有包裝成 exe。** 安裝程式將腳本放進 Program Files，建立以 SYSTEM 執行的開機排程，並以檔案 ACL 保護腳本和 token。需要已啟用 Hyper-V 及其 PowerShell 管理工具的 Windows 主機。
+**Agent 是 Go 編譯的單一 Windows exe**，內嵌 PowerShell 5.1 collector 呼叫 Hyper-V 管理工具。HTTP、token、TLS、排程及設定儲存由 Go 處理，不需要 username/password。安裝程式可建立以 SYSTEM 執行的開機排程，並以 ACL 保護 exe、設定和私鑰。
 
 ## 安裝
 
 ### 1. Windows agent
 
-下載本 repo，在系統管理員 Windows PowerShell 執行：
+從 [Releases](https://github.com/takidog/homarr-hyperV-monitor/releases) 下載 Windows amd64 zip，解壓後在系統管理員終端執行：
 
 ```powershell
-.\agent\Install-HyperVAgent.ps1
+.\hyperv-monitor.exe configure --bind 127.0.0.1 --port 9276
+.\hyperv-monitor.exe
 ```
 
-預設僅監聽 `http://127.0.0.1:9276/`。正式環境請使用本機 TLS reverse proxy，或設定 HTTP.sys 憑證及 HTTPS listener。API key 位於 `%ProgramData%\Homarr Hyper-V Agent\api-key.txt`，只提供給 Homarr integration。
+第一次設定儲存到 `~/.homarr-hyperv-monitor/config.json`，後續直接執行 exe 即可。預設自動產生 token；也支援 `--token`、`--token-file`、自訂 `--config` 路徑與採樣間隔。
 
-跨機器連線、憑證、限制來源 IP 的防火牆、更新及移除方式見 [agent 安裝文件](agent/README.md)。Docker 中的 localhost 並不是 Windows host。不要將 agent 暴露到網際網路，也不要關閉 TLS 憑證驗證。
+跨機器連線可用 `--generate-tls` 產生對應綁定 IP 的憑證，再將公開的 `server.crt` 放入 Homarr trusted certificates。只開放 Homarr 伺服器來源 IP。確認可連線後，執行 `Install-HyperVAgent.ps1` 安裝開機排程。完整 HTTPS、防火牆、更新、token 輪替及移除方式見 [agent 文件](agent/README.md)。
 
 ### 2. Homarr image
 
@@ -65,7 +74,7 @@ docker compose up -d --no-deps homarr
 
 | 位置 | 內容 |
 | --- | --- |
-| `agent/` | Windows collector、HTTP listener、安裝程式 |
+| `agent/` | Go exe 原始碼、內嵌 Windows collector、安裝程式 |
 | `homarr/overlay/packages/integrations/src/hyperv/` | 驗證 snapshot、token 認證、timeout 與資料新鮮度檢查 |
 | `homarr/overlay/packages/widgets/src/hyperv/` | Widget UI 與選項 |
 | `homarr/overlay/packages/api/`、`packages/request-handler/` | tRPC 與快取 |

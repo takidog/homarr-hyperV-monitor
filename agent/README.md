@@ -1,50 +1,80 @@
-# Hyper-V agent for Homarr
+# Hyper-V Go agent
 
-A read-only Windows PowerShell 5.1 agent for Windows 10/11 Pro and Windows Server with the Hyper-V role and PowerShell management tools. It exposes one authenticated endpoint, `GET /api/v1/snapshot`. No VM control or remote command endpoint is implemented. It does not enable VM resource metering, change VMs, or require guest agents to be installed by Homarr.
+A standalone Windows Go executable, using an embedded Windows PowerShell 5.1 collector (`Get-VM` and local CIM). The HTTP server, token authentication, configuration, TLS, scheduling and timeout handling are implemented in Go. No Go runtime or separate collector script is needed on the host. Hyper-V and its PowerShell management tools are required.
 
-## Run
+Only `GET /api/v1/snapshot` is exposed. There is no username/password login, VM control, remote command API or guest agent installation.
 
-Run in an elevated Windows PowerShell window on the Hyper-V host. Generate a random token in a directory accessible only to the agent account and administrators:
+## Configure once, then run
 
-```powershell
-$bytes = New-Object byte[] 32
-$random = [Security.Cryptography.RandomNumberGenerator]::Create()
-$random.GetBytes($bytes)
-$random.Dispose()
-[IO.File]::WriteAllText('C:\secure\hyperv-api-key.txt', ([BitConverter]::ToString($bytes).Replace('-', '').ToLowerInvariant()))
-.\Start-HyperVAgent.ps1 -ApiKeyFile 'C:\secure\hyperv-api-key.txt'
-```
-
-The default listener is `http://127.0.0.1:9276/`. Initial collection takes a few seconds; until then the API returns 503. Test it locally:
+Download the Windows amd64 archive from [Releases](https://github.com/takidog/homarr-hyperV-monitor/releases). Extract it and run from an elevated terminal on the Hyper-V host:
 
 ```powershell
-$headers = @{ Authorization = 'Bearer ' + (Get-Content 'C:\secure\hyperv-api-key.txt' -Raw).Trim() }
-Invoke-RestMethod 'http://127.0.0.1:9276/api/v1/snapshot' -Headers $headers
+.\hyperv-monitor.exe configure --bind 127.0.0.1 --port 9276
+.\hyperv-monitor.exe
 ```
 
-In Homarr, use the **Hyper-V** integration, set its URL to the agent's reachable origin, and supply this token as the API key. Add the integration to the dedicated **Hyper-V** widget. A Docker container's `localhost` is the container, not the Windows host. For Docker Desktop, use `host.docker.internal` with an appropriate host listener; for a separate server, use the Windows host's LAN name/address.
+Configuration is saved to `%USERPROFILE%\.homarr-hyperv-monitor\config.json`. Subsequent launches without arguments load that file. The dedicated directory is restricted to the current user, Administrators and SYSTEM. The file contains the API token: do not commit or share it.
 
-## Startup and network access
+| Configure option | Meaning |
+| --- | --- |
+| `--bind IP` | Specific IPv4/IPv6 address; default `127.0.0.1` |
+| `--port PORT` | Listener port; default `9276` |
+| `--token TOKEN` | Your 32–256 character URL-safe token; omitted = cryptographically random 256-bit token |
+| `--token-file PATH` | Read an existing token from a file, avoiding shell history |
+| `--interval SECONDS` | Collection interval after each sample; default 10, range 5–20 |
+| `--config PATH` | Custom config file in a dedicated directory |
+| `--generate-tls` | Generate a self-signed certificate for a specific bind IP, valid for two years |
+| `--tls-cert PATH --tls-key PATH` | Use an existing PEM certificate/private key pair |
+| `--allow-remote-http` | Explicit opt-in to unencrypted HTTP on a trusted private network |
+| `--force` | Replace config; omitted options reset to defaults and omitted token creates a new one |
 
-`Install-HyperVAgent.ps1` copies the two runtime scripts to `%ProgramFiles%\Homarr Hyper-V Agent`, creates a random token in `%ProgramData%\Homarr Hyper-V Agent\api-key.txt`, and registers the **Homarr Hyper-V Agent** startup task. It runs as SYSTEM because local Hyper-V/CIM access needs privileges. Both directories are restricted to SYSTEM and Administrators. The task restarts on failure and can run without a signed-in user. Installation does not open a firewall port.
+Changing settings requires restarting the process/task. You can edit the JSON directly, or rerun `configure --force` with all intended values. Generated certificates are not overwritten; to reuse them, specify `--tls-cert` and `--tls-key`. A bind-IP change requires a certificate with matching SANs. For a custom config, launch with `hyperv-monitor.exe --config PATH`.
 
-Prefer a TLS reverse proxy on the host, forwarding to the default loopback listener. Alternatively, supply an HTTPS prefix and bind a certificate from the Local Machine certificate store to that port using HTTP.sys:
+## HTTPS across machines
+
+Example addresses below are documentation placeholders. Replace them with the Windows and Homarr server IPs:
 
 ```powershell
-netsh http add sslcert ipport=0.0.0.0:9276 certhash=YOUR_CERTIFICATE_THUMBPRINT appid='{7602CF35-FB39-4B48-ACCB-54B8F2854284}'
-.\Install-HyperVAgent.ps1 -ListenPrefix 'https://hyperv.example.net:9276/'
+.\hyperv-monitor.exe configure --bind 192.0.2.10 --port 9276 --generate-tls
+.\hyperv-monitor.exe
+New-NetFirewallRule -DisplayName 'Homarr Hyper-V HTTPS' -Direction Inbound -Action Allow -Protocol TCP -LocalAddress 192.0.2.10 -LocalPort 9276 -RemoteAddress 192.0.2.20
 ```
 
-The certificate must have a private key and match the hostname. Trust its CA in Homarr; do not disable certificate validation. For an isolated trusted network, HTTP on a specific LAN address is available only with the explicit `-AllowRemoteHttp` flag. HTTP exposes the bearer token to anyone able to observe that network traffic. Restrict an inbound Windows Firewall rule to the Homarr server's IP. Do not expose this listener to the internet.
+Copy **only `server.crt`** to Homarr's `/appdata/trusted-certificates/` directory, then restart Homarr. Keep `server.key` and `config.json` private. No HTTP.sys certificate binding is needed: Go terminates TLS directly. Set the integration URL to `https://192.0.2.10:9276` and API key to `token` from config. Do not disable certificate validation. Renew the generated certificate before expiry and update Homarr's trusted certificate.
 
-To stop or remove the startup task (configuration/token files are retained):
+A container's `localhost` is the container, not the Windows host. Restrict the Windows firewall to the Homarr server's source IP. HTTP exposes the token to network observers; do not expose the listener to the internet. Initial collection takes a few seconds and returns 503 until ready.
+
+## Start automatically
+
+After configuring and checking the agent, stop the foreground instance and run the included installer as administrator:
+
+```powershell
+.\Install-HyperVAgent.ps1
+```
+
+It copies the exe into `%ProgramFiles%\Homarr Hyper-V Agent`, copies config/certificates into `%ProgramData%\Homarr Hyper-V Agent`, restricts both to SYSTEM and Administrators, and registers the **Homarr Hyper-V Agent** startup task as SYSTEM. No firewall rule is added automatically. The installed task uses the ProgramData copy; editing your home-directory config does not change that copy.
+
+For an update or config change, run `Install-HyperVAgent.ps1 -Replace` with the intended config. `-Executable PATH` and `-Config PATH` select custom input files. This also replaces the earlier PowerShell prototype's scheduled task.
 
 ```powershell
 Stop-ScheduledTask -TaskName 'Homarr Hyper-V Agent'
 Unregister-ScheduledTask -TaskName 'Homarr Hyper-V Agent' -Confirm:$false
 ```
 
-For an update, stop/unregister the task and rerun the installer. The token is preserved. To rotate it, stop the task, replace the token file with another random value, update Homarr, then start the task. Keep installation and token directories protected if using a custom service account or service wrapper.
+These commands remove automatic startup, retaining files/config. To rotate a token, stop the agent, change `token` in the active config, update Homarr's API key and start the agent again.
+
+## Build and check
+
+On Windows with Go 1.25 or newer (release built with Go 1.27.3):
+
+```powershell
+cd agent
+go test ./...
+go vet ./...
+go build -trimpath -ldflags '-s -w -X main.version=0.1.0' -o hyperv-monitor.exe .
+```
+
+The binary is not Authenticode-signed. Releases include SHA-256 checksums. The source has no third-party Go dependencies. Tests cover token rejection, method/path restrictions, stale/failed sample rejection and remote HTTP opt-in; real Hyper-V collection and SYSTEM startup were also checked on a Windows host.
 
 ## Metrics and limitations
 
@@ -60,6 +90,6 @@ For an update, stop/unregister the task and rerun the installer. The token is pr
 
 Add one integration per host. Collection runs locally every 10 seconds after the previous sample completes; it is independent of HTTP requests. Collection is killed after 30 seconds. A collection failure clears the cache and returns 503. Samples older than 60 seconds are not served. Homarr also validates the payload version, numeric ranges, body size and timestamp; synchronize clocks on both machines. Missing/invalid tokens return 401; other methods return 405. No credentials are returned in snapshots.
 
-For collection failures, run `Collect-HyperVSnapshot.ps1` directly as the same account. Confirm `Get-VM` and the Hyper-V logical processor CIM counters work. Host counter failures must be fixed instead of substituting management-OS CPU readings. The startup task's Last Run Result diagnoses launch failures; a 503 diagnoses collection failure or warm-up.
+For collection failures, run `Collect-HyperVSnapshot.ps1` directly as the same account. Confirm `Get-VM` and the Hyper-V logical processor CIM counters work. Host counter failures must be fixed instead of substituting management-OS CPU readings. Run the exe with its active config in an elevated terminal to inspect launch/collection errors. The startup task's Last Run Result diagnoses launch failures; a 503 diagnoses collection failure or warm-up.
 
 References: [Get-VM](https://learn.microsoft.com/en-us/powershell/module/hyper-v/get-vm), [Hyper-V performance counters](https://learn.microsoft.com/en-us/windows-server/administration/performance-tuning/role/hyper-v-server/detecting-virtualized-environment-bottlenecks), [Windows Admin Center VM metrics](https://learn.microsoft.com/en-us/windows-server/manage/windows-admin-center/use/manage-virtual-machines).

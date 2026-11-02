@@ -18,8 +18,8 @@ import { hypervWidget } from "@site/docs/widgets/hyperv";
 
 ### Agent setup
 
-Run the PowerShell agent on each Windows Hyper-V host. The Hyper-V role, PowerShell management tools and administrative
-access are required. The [agent installation guide](https://github.com/homarr-labs/homarr/tree/dev/tools/hyperv-agent)
+Run the Go agent on each Windows Hyper-V host. The Hyper-V role, PowerShell management tools and administrative
+access are required. The [agent installation guide](https://github.com/takidog/homarr-hyperV-monitor/tree/main/agent)
 covers foreground use, the startup task, TLS, firewall access and token rotation.
 
 Use the agent's reachable HTTP(S) origin as the integration URL (port 9276 by default). The default listener accepts
@@ -29,12 +29,12 @@ does not refer to the Hyper-V host. Add a separate integration for each host.
 ### Secrets
 
 <IntegrationSecrets
-  secrets={[{ credentials: ["apiKey"], steps: ["Use the random token from the agent's API key file."] }]}
+  secrets={[{ credentials: ["apiKey"], steps: ["Use the token from the agent's config.json file."] }]}
 />
 
 ### Reading memory and CPU
 
-Host CPU includes guest workloads. VM CPU is relative to the VM's assigned virtual processors. VM RAM is memory
+Host CPU includes guest workloads. VM CPU is relative to the VM's assigned virtual processors. VM RAM shows
 **memory demand alongside assigned memory**. Demand can exceed assignment under pressure. It is an estimate from Hyper-V, not
 an exact guest process memory total. Unavailable guest telemetry displays a dash; startup RAM and Dynamic Memory
 limits are available in VM details. Off VMs have zero assigned RAM.
