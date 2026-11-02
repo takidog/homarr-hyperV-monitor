@@ -1,0 +1,335 @@
+diff --git a/packages/api/src/mcp.ts b/packages/api/src/mcp.ts
+index df622bc..1499f2f 100644
+--- a/packages/api/src/mcp.ts
++++ b/packages/api/src/mcp.ts
+@@ -23,6 +23,7 @@ import { calendarRouter } from "./router/widgets/calendar";
+ import { dnsHoleRouter } from "./router/widgets/dns-hole";
+ import { downloadsRouter } from "./router/widgets/downloads";
+ import { healthMonitoringRouter } from "./router/widgets/health-monitoring";
++import { hypervRouter } from "./router/widgets/hyperv";
+ import { mediaRequestsRouter } from "./router/widgets/media-requests";
+ import { mediaServerRouter } from "./router/widgets/media-server";
+ import { mediaOrganizerRouter } from "./router/widgets/media-organizer";
+@@ -55,6 +56,7 @@ export const mcpRouter = createTRPCRouter({
+   dnsHole: dnsHoleRouter,
+   downloads: downloadsRouter,
+   healthMonitoring: healthMonitoringRouter,
++  hyperv: hypervRouter,
+   mediaRequests: mediaRequestsRouter,
+   mediaServer: mediaServerRouter,
+   mediaOrganizer: mediaOrganizerRouter,
+diff --git a/packages/api/src/router/widgets/index.ts b/packages/api/src/router/widgets/index.ts
+index 63cae96..f868bc2 100644
+--- a/packages/api/src/router/widgets/index.ts
++++ b/packages/api/src/router/widgets/index.ts
+@@ -12,6 +12,7 @@ export const widgetRouter = createTRPCRouter({
+   paperlessNgx: lazy(() => import("./paperless-ngx").then((mod) => mod.paperlessNgxRouter)),
+   thingport: lazy(() => import("./thingport").then((mod) => mod.thingportRouter)),
+   patchmon: lazy(() => import("./patchmon").then((mod) => mod.patchmonRouter)),
++  hyperv: lazy(() => import("./hyperv").then((mod) => mod.hypervRouter)),
+   bazarr: lazy(() => import("./bazarr").then((mod) => mod.bazarrRouter)),
+   notebook: lazy(() => import("./notebook").then((mod) => mod.notebookRouter)),
+   weather: lazy(() => import("./weather").then((mod) => mod.weatherRouter)),
+diff --git a/packages/api/src/test/mcp.spec.ts b/packages/api/src/test/mcp.spec.ts
+index 3693561..dded531 100644
+--- a/packages/api/src/test/mcp.spec.ts
++++ b/packages/api/src/test/mcp.spec.ts
+@@ -57,6 +57,7 @@ const MCP_TOOL_ALLOWLIST = {
+     "healthMonitoring_getClusterHealthStatus",
+     "healthMonitoring_getSystemHealthStatus",
+     "healthMonitoring_listStorageVolumes",
++    "hyperv_getSummary",
+     "icon_detectFavicon",
+     "icon_findIcons",
+     "info_getInfo",
+diff --git a/packages/definitions/src/docs/homarr-docs-sitemap.ts b/packages/definitions/src/docs/homarr-docs-sitemap.ts
+index 403a3cf..a6d4181 100644
+--- a/packages/definitions/src/docs/homarr-docs-sitemap.ts
++++ b/packages/definitions/src/docs/homarr-docs-sitemap.ts
+@@ -132,6 +132,7 @@ export type HomarrDocumentationPath =
+   | "/docs/integrations/healthchecks"
+   | "/docs/integrations/home-assistant"
+   | "/docs/integrations/homebox"
++  | "/docs/integrations/hyperv"
+   | "/docs/integrations/ical"
+   | "/docs/integrations/immich"
+   | "/docs/integrations/jackett"
+@@ -245,6 +246,7 @@ export type HomarrDocumentationPath =
+   | "/docs/widgets/downloads"
+   | "/docs/widgets/firewall"
+   | "/docs/widgets/health-monitoring"
++  | "/docs/widgets/hyperv"
+   | "/docs/widgets/iframe"
+   | "/docs/widgets/immich-album-carousel"
+   | "/docs/widgets/immich-server-stats"
+diff --git a/packages/definitions/src/docs/widget-doc-slugs.ts b/packages/definitions/src/docs/widget-doc-slugs.ts
+index 4e64405..8aec9e0 100644
+--- a/packages/definitions/src/docs/widget-doc-slugs.ts
++++ b/packages/definitions/src/docs/widget-doc-slugs.ts
+@@ -2,6 +2,7 @@ import type { WidgetKind } from "../widget";
+ 
+ export const widgetDocSlugs = {
+   stats: "stats",
++  hyperv: "hyperv",
+   clock: "clock",
+   weather: "weather",
+   airQuality: "air-quality",
+diff --git a/packages/definitions/src/integration.ts b/packages/definitions/src/integration.ts
+index 62fcd71..9f697e5 100644
+--- a/packages/definitions/src/integration.ts
++++ b/packages/definitions/src/integration.ts
+@@ -696,6 +696,15 @@ export const integrationDefs = {
+     documentationSlug: "proxmox",
+     defaultPort: 8006,
+   },
++  hyperv: {
++    httpAuth: { type: "bearer" },
++    name: "Hyper-V",
++    secretKinds: [["apiKey"]],
++    iconUrl: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@master/svg/microsoft.svg",
++    category: ["systemMonitoring"],
++    documentationSlug: "hyperv",
++    defaultPort: 9276,
++  },
+   nextcloud: {
+     httpAuth: { type: "adapter" },
+     name: "Nextcloud",
+diff --git a/packages/definitions/src/widget-integration-map.ts b/packages/definitions/src/widget-integration-map.ts
+index 96f69b5..573ba7e 100644
+--- a/packages/definitions/src/widget-integration-map.ts
++++ b/packages/definitions/src/widget-integration-map.ts
+@@ -172,6 +172,7 @@ export const widgetIntegrationConfigs = {
+   "thingport-featuredModel": { supportedIntegrations: ["thingport", "mock"], maxIntegrations: 1 },
+   "thingport-activityHeatmap": { supportedIntegrations: ["thingport", "mock"], maxIntegrations: 1 },
+   patchmon: { supportedIntegrations: ["patchmon", "mock"], maxIntegrations: 1 },
++  hyperv: { supportedIntegrations: ["hyperv"], maxIntegrations: 1 },
+   bazarr: { supportedIntegrations: ["bazarr", "mock"], maxIntegrations: 1 },
+   tracearr: { supportedIntegrations: ["tracearr", "mock"] },
+   speedtestTracker: { supportedIntegrations: ["speedtestTracker", "mock"] },
+diff --git a/packages/definitions/src/widget.ts b/packages/definitions/src/widget.ts
+index 8d70d27..92edb5f 100644
+--- a/packages/definitions/src/widget.ts
++++ b/packages/definitions/src/widget.ts
+@@ -29,6 +29,7 @@ export const widgetKinds = [
+   "bookmarks",
+   "indexerManager",
+   "healthMonitoring",
++  "hyperv",
+   "releases",
+   "mediaReleases",
+   "dockerContainers",
+@@ -76,6 +77,7 @@ export const widgetDefaultSizes: Partial<Record<WidgetKind, { width: number; hei
+   calendar: { width: 2, height: 2 },
+   countdown: { width: 2, height: 1 },
+   customApi: { width: 3, height: 2 },
++  hyperv: { width: 4, height: 3 },
+   downloads: { width: 4, height: 2 },
+   indexerManager: { width: 2, height: 3 },
+   timer: { width: 2, height: 1 },
+diff --git a/packages/integrations/src/base/creator.ts b/packages/integrations/src/base/creator.ts
+index 7bd5649..7a6e9cb 100644
+--- a/packages/integrations/src/base/creator.ts
++++ b/packages/integrations/src/base/creator.ts
+@@ -297,6 +297,8 @@ const integrationCreators = {
+     new (await import("../media-transcoding/tdarr-integration")).TdarrIntegration(input),
+   proxmox: async (input: IntegrationInput) =>
+     new (await import("../proxmox/proxmox-integration")).ProxmoxIntegration(input),
++  hyperv: async (input: IntegrationInput) =>
++    new (await import("../hyperv/hyperv-integration")).HyperVIntegration(input),
+   emby: async (input: IntegrationInput) => new (await import("../emby/emby-integration")).EmbyIntegration(input),
+   nextcloud: async (input: IntegrationInput) =>
+     new (await import("../nextcloud/nextcloud.integration")).NextcloudIntegration(input),
+diff --git a/packages/integrations/src/types.ts b/packages/integrations/src/types.ts
+index 344ab6f..c818236 100644
+--- a/packages/integrations/src/types.ts
++++ b/packages/integrations/src/types.ts
+@@ -13,6 +13,7 @@ export * from "./interfaces/media-requests/media-request-types";
+ export * from "./base/searchable-integration";
+ export * from "./homeassistant/homeassistant-types";
+ export * from "./proxmox/proxmox-types";
++export type { HyperVSnapshot } from "./hyperv/hyperv-types";
+ export * from "./unifi-controller/unifi-controller-types";
+ export * from "./opnsense/opnsense-types";
+ export * from "./interfaces/media-releases";
+diff --git a/packages/translation/src/lang/en.json b/packages/translation/src/lang/en.json
+index c0bdd86..2532fac 100644
+--- a/packages/translation/src/lang/en.json
++++ b/packages/translation/src/lang/en.json
+@@ -2311,6 +2311,52 @@
+     }
+   },
+   "widget": {
++    "hyperv": {
++      "name": "Hyper-V",
++      "description": "Monitor a Windows Hyper-V host and its virtual machines.",
++      "running": "{running} / {total} running",
++      "logicalProcessors": "{count} logical processors",
++      "hostUptime": "Host uptime: {value}",
++      "duration": "{days}d {hours}h {minutes}m",
++      "virtualMachines": "Virtual machines",
++      "noVms": "No virtual machines on this host.",
++      "noRunningVms": "No running virtual machines.",
++      "hostStorage": "Host storage",
++      "sampledAt": "Sampled at {time}",
++      "memoryDemandAssigned": "RAM demand / assigned",
++      "memoryUnavailable": "Guest memory demand is unavailable. Assigned RAM is the host allocation, not guest usage.",
++      "memoryExplanation": "Memory demand is Hyper-V’s estimate of guest requirements, not exact guest process usage.",
++      "virtualProcessors": "Virtual processors",
++      "uptime": "Uptime",
++      "startupMemory": "Startup memory",
++      "dynamicMemory": "Dynamic Memory",
++      "minimumMemory": "Minimum memory",
++      "maximumMemory": "Maximum memory",
++      "enabled": "Enabled",
++      "disabled": "Disabled",
++      "vmId": "VM ID",
++      "state": {
++        "running": "Running",
++        "off": "Off",
++        "paused": "Paused",
++        "saved": "Saved"
++      },
++      "option": {
++        "hostName": {
++          "label": "Host display name",
++          "description": "Leave empty to use the hostname reported by Windows."
++        },
++        "showStoppedVms": {
++          "label": "Show stopped virtual machines"
++        },
++        "showStorage": {
++          "label": "Show host storage"
++        }
++      },
++      "error": {
++        "unavailable": "Hyper-V metrics are unavailable. Check the agent, API key and host clock."
++      }
++    },
+     "integrationSelect": {
+       "configureIntegrationFirst": "Connect an integration first",
+       "placeholder": "Select an option"
+diff --git a/packages/translation/src/lang/zh.json b/packages/translation/src/lang/zh.json
+index d696903..4e2e529 100644
+--- a/packages/translation/src/lang/zh.json
++++ b/packages/translation/src/lang/zh.json
+@@ -2307,6 +2307,52 @@
+     }
+   },
+   "widget": {
++    "hyperv": {
++      "name": "Hyper-V",
++      "description": "監測 Windows Hyper-V 主機與個別虛擬機。",
++      "running": "{running} / {total} 執行中",
++      "logicalProcessors": "{count} 個邏輯處理器",
++      "hostUptime": "主機運行時間：{value}",
++      "duration": "{days} 天 {hours} 小時 {minutes} 分鐘",
++      "virtualMachines": "虛擬機",
++      "noVms": "此主機沒有虛擬機。",
++      "noRunningVms": "目前沒有執行中的虛擬機。",
++      "hostStorage": "主機儲存空間",
++      "sampledAt": "採樣時間：{time}",
++      "memoryDemandAssigned": "RAM 需求 / 配置",
++      "memoryUnavailable": "無法取得客體記憶體需求。配置 RAM 是主機分配量，不代表客體使用量。",
++      "memoryExplanation": "記憶體需求是 Hyper-V 對客體需求的估計，並非客體程序的精確使用量。",
++      "virtualProcessors": "虛擬處理器",
++      "uptime": "運行時間",
++      "startupMemory": "啟動記憶體",
++      "dynamicMemory": "動態記憶體",
++      "minimumMemory": "最小記憶體",
++      "maximumMemory": "最大記憶體",
++      "enabled": "啟用",
++      "disabled": "停用",
++      "vmId": "VM ID",
++      "state": {
++        "running": "執行中",
++        "off": "關機",
++        "paused": "已暫停",
++        "saved": "已儲存"
++      },
++      "option": {
++        "hostName": {
++          "label": "主機顯示名稱",
++          "description": "留空時使用 Windows 回報的主機名稱。"
++        },
++        "showStoppedVms": {
++          "label": "顯示未執行的虛擬機"
++        },
++        "showStorage": {
++          "label": "顯示主機儲存空間"
++        }
++      },
++      "error": {
++        "unavailable": "無法取得 Hyper-V 數據。請檢查 agent、API key 與主機時間。"
++      }
++    },
+     "integrationSelect": {
+       "configureIntegrationFirst": "先連線整合",
+       "placeholder": "選擇一個選項"
+diff --git a/packages/ui/src/widget-icons.ts b/packages/ui/src/widget-icons.ts
+index 21733e6..e11bba6 100644
+--- a/packages/ui/src/widget-icons.ts
++++ b/packages/ui/src/widget-icons.ts
+@@ -11,6 +11,7 @@ import {
+   IconBookmark,
+   IconBrandDocker,
+   IconBrandMinecraft,
++  IconBrandWindows,
+   IconBrowser,
+   IconBuildingBank,
+   IconBusStop,
+@@ -63,6 +64,7 @@ import type { TablerIcon } from "@tabler/icons-react";
+ import type { WidgetKind } from "@homarr/definitions";
+ 
+ export const widgetCatalogIcons: Record<WidgetKind, TablerIcon> = {
++  hyperv: IconBrandWindows,
+   stats: IconChartBar,
+   clock: IconClock,
+   weather: IconCloud,
+diff --git a/packages/widgets/src/refetch-intervals.ts b/packages/widgets/src/refetch-intervals.ts
+index e7751e1..b6b6e6b 100644
+--- a/packages/widgets/src/refetch-intervals.ts
++++ b/packages/widgets/src/refetch-intervals.ts
+@@ -14,6 +14,7 @@ export const widgetQueryRefetchIntervals = [
+   },
+   { queryKey: [["widget", "firewall"]], intervalSeconds: 10 },
+   { queryKey: [["widget", "healthMonitoring"]], intervalSeconds: 10 },
++  { queryKey: [["widget", "hyperv", "getSummary"]], intervalSeconds: 10 },
+   { queryKey: [["widget", "llamacpp"]], intervalSeconds: 5 },
+   { queryKey: [["widget", "mediaServer", "getCurrentStreams"]], intervalSeconds: 10 },
+   { queryKey: [["widget", "tracearr"]], intervalSeconds: 10 },
+diff --git a/packages/widgets/src/registry.ts b/packages/widgets/src/registry.ts
+index 011c46e..260f585 100644
+--- a/packages/widgets/src/registry.ts
++++ b/packages/widgets/src/registry.ts
+@@ -24,6 +24,7 @@ import type * as dockerContainers from "./docker";
+ import type * as downloads from "./downloads";
+ import type * as firewall from "./firewall";
+ import type * as healthMonitoring from "./health-monitoring";
++import type * as hyperv from "./hyperv";
+ import type * as iframe from "./iframe";
+ import type * as immichAlbumCarousel from "./immich/album-carousel";
+ import type * as immichServerStats from "./immich/server-stats";
+@@ -119,6 +120,7 @@ export const widgetModuleLoaders = {
+   "thingport-featuredModel": () => import("./thingport/featured-model"),
+   "thingport-activityHeatmap": () => import("./thingport/activity-heatmap"),
+   patchmon: () => import("./patchmon"),
++  hyperv: () => import("./hyperv"),
+   tracearr: () => import("./tracearr"),
+   speedtestTracker: () => import("./speedtest-tracker"),
+   uptimeKuma: () => import("./uptime-kuma"),
+@@ -188,6 +190,7 @@ export type WidgetImports = {
+   "thingport-featuredModel": typeof thingportFeaturedModel;
+   "thingport-activityHeatmap": typeof thingportActivityHeatmap;
+   patchmon: typeof patchmon;
++  hyperv: typeof hyperv;
+   tracearr: typeof tracearr;
+   speedtestTracker: typeof speedtestTracker;
+   uptimeKuma: typeof uptimeKuma;
+@@ -264,6 +267,7 @@ export const widgetComponentLoaders = {
+   "thingport-featuredModel": () => import("./thingport/featured-model/component"),
+   "thingport-activityHeatmap": () => import("./thingport/activity-heatmap/component"),
+   patchmon: () => import("./patchmon/component"),
++  hyperv: () => import("./hyperv/component"),
+   tracearr: () => import("./tracearr/component"),
+   speedtestTracker: () => import("./speedtest-tracker/component"),
+   uptimeKuma: () => import("./uptime-kuma/component"),

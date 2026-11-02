@@ -1,0 +1,12 @@
+.build/
+.env
+.env.*
+!.env.example
+*.key
+*.pfx
+*.pem
+api-key.txt
+appdata/
+*.sqlite*
+*.log
+__pycache__/

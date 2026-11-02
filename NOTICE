@@ -1,0 +1,7 @@
+Homarr Hyper-V Monitor
+Copyright 2026 the contributors
+
+This project extends Homarr (https://github.com/homarr-labs/homarr),
+licensed under the Apache License, Version 2.0. The registration patch
+contains modified portions of Homarr. Homarr's name and trademarks
+belong to their respective owners. This is an independent extension.

@@ -1,0 +1,20 @@
+---
+title: "Hyper-V"
+description: "Host and virtual machine monitoring for Windows Hyper-V."
+hide_title: true
+---
+
+import { WidgetHeader } from "@site/src/components/widgets/header";
+import { hypervWidget } from ".";
+
+<WidgetHeader widget={hypervWidget} categories={["System monitoring"]} />
+
+This widget requires a [Hyper-V integration](/docs/integrations/hyperv) connected to the Windows agent. Use one
+widget per host. It refreshes every 10 seconds and displays host CPU/RAM, individual VM CPU, memory demand and
+assigned memory, and each VM's state. Expand a VM for its GUID, uptime and static or Dynamic Memory configuration.
+
+VM memory demand is a Hyper-V estimate; it is not exact guest process usage. A dash means that guest telemetry is
+unavailable. Off VMs have no assigned RAM, while their configured startup memory remains visible in details.
+Host storage is optional and represents local drive volumes, not guest filesystem usage.
+
+If collection or authentication fails, measurements are replaced with an error instead of displaying old values.

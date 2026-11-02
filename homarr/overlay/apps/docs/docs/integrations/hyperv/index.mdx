@@ -1,0 +1,46 @@
+---
+title: "Hyper-V"
+description: "Monitor Windows Hyper-V host and virtual machine CPU and memory."
+hide_title: true
+---
+
+import { IntegrationHeader } from "@site/src/components/integrations/header";
+import { IntegrationCapabilites } from "@site/src/components/integrations/widgets";
+import { IntegrationSecrets } from "@site/src/components/integrations/secrets";
+import { hypervIntegration } from ".";
+import { hypervWidget } from "@site/docs/widgets/hyperv";
+
+<IntegrationHeader integration={hypervIntegration} categories={["System monitoring"]} />
+
+### Widgets and capabilities
+
+<IntegrationCapabilites items={[{ widget: hypervWidget }]} />
+
+### Agent setup
+
+Run the PowerShell agent on each Windows Hyper-V host. The Hyper-V role, PowerShell management tools and administrative
+access are required. The [agent installation guide](https://github.com/homarr-labs/homarr/tree/dev/tools/hyperv-agent)
+covers foreground use, the startup task, TLS, firewall access and token rotation.
+
+Use the agent's reachable HTTP(S) origin as the integration URL (port 9276 by default). The default listener accepts
+only host-local connections; configure TLS or a reverse proxy for a remote Homarr server. In a container, `localhost`
+does not refer to the Hyper-V host. Add a separate integration for each host.
+
+### Secrets
+
+<IntegrationSecrets
+  secrets={[{ credentials: ["apiKey"], steps: ["Use the random token from the agent's API key file."] }]}
+/>
+
+### Reading memory and CPU
+
+Host CPU includes guest workloads. VM CPU is relative to the VM's assigned virtual processors. VM RAM is memory
+**memory demand alongside assigned memory**. Demand can exceed assignment under pressure. It is an estimate from Hyper-V, not
+an exact guest process memory total. Unavailable guest telemetry displays a dash; startup RAM and Dynamic Memory
+limits are available in VM details. Off VMs have zero assigned RAM.
+
+Storage shows local host drive volumes. Guest filesystem usage and VM network/disk I/O are not available. The agent
+does not discover Failover Clusters or provide VM control actions.
+
+If the agent cannot collect data, it returns 503 instead of keeping the last successful values. Allow a few seconds
+for the first sample and keep the host and Homarr clocks synchronized. A sample older than 60 seconds is rejected.
