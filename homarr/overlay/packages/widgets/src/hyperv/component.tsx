@@ -182,7 +182,9 @@ function VmRow({ vm, narrow }: { vm: HyperVSnapshot["virtualMachines"][number]; 
           </Group>
           <Group gap="sm">
             <Text size="xs">CPU {cpu.toFixed(1)}%</Text>
-            {hasGpu && <Text size="xs">GPU {vm.gpuUsagePercent == null ? "—" : `${vm.gpuUsagePercent.toFixed(1)}%`}</Text>}
+            {hasGpu && (
+              <Text size="xs">GPU {vm.gpuUsagePercent == null ? "—" : `${vm.gpuUsagePercent.toFixed(1)}%`}</Text>
+            )}
             <Text size="xs">
               {t("memoryDemandAssigned")} {demand} / {assigned}
             </Text>
@@ -202,7 +204,10 @@ function VmRow({ vm, narrow }: { vm: HyperVSnapshot["virtualMachines"][number]; 
           <SimpleGrid cols={narrow ? 1 : 2} spacing="xs">
             <Detail label={t("virtualProcessors")} value={String(vm.processorCount)} />
             {vm.gpuPartitionCount !== undefined && (
-              <Detail label={t("gpuPartitions")} value={vm.gpuPartitionCount === null ? "—" : String(vm.gpuPartitionCount)} />
+              <Detail
+                label={t("gpuPartitions")}
+                value={vm.gpuPartitionCount === null ? "—" : String(vm.gpuPartitionCount)}
+              />
             )}
             <Detail label={t("uptime")} value={uptime(vm.uptimeSeconds, t)} />
             <Detail label={t("startupMemory")} value={formatBytes(vm.memoryStartupBytes)} />
