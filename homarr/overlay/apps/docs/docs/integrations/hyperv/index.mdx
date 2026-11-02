@@ -44,3 +44,5 @@ does not discover Failover Clusters or provide VM control actions.
 
 If the agent cannot collect data, it returns 503 instead of keeping the last successful values. Allow a few seconds
 for the first sample and keep the host and Homarr clocks synchronized. A sample older than 60 seconds is rejected.
+
+GPU-PV monitoring requires agent v0.2 or later and WDDM GPU Engine counters. GPU usage is the busiest physical engine, not the partition quota. VM usage is attributed through the Hyper-V worker process. Missing counters display a dash; GPU probing failures do not interrupt CPU/RAM sampling.

@@ -18,3 +18,5 @@ unavailable. Off VMs have no assigned RAM, while their configured startup memory
 Host storage is optional and represents local drive volumes, not guest filesystem usage.
 
 If collection or authentication fails, measurements are replaced with an error instead of displaying old values.
+
+GPU-PV monitoring requires agent v0.2 or later and WDDM GPU Engine counters. GPU usage is the busiest physical engine, not the partition quota. VM usage is attributed through the Hyper-V worker process. Missing counters display a dash; GPU probing failures do not interrupt CPU/RAM sampling.

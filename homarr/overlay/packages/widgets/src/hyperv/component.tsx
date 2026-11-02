@@ -71,6 +71,13 @@ function HyperVContent({
             detail={`${memory.used} / ${memory.total}`}
           />
         </SimpleGrid>
+        {data.host.gpuUsagePercent !== undefined && (
+          <Metric
+            label="GPU"
+            value={data.host.gpuUsagePercent}
+            detail={t(data.host.gpuUsagePercent === null ? "gpuUnavailable" : "gpuBusiestEngine")}
+          />
+        )}
         <Text size="xs" c="dimmed">
           {t("hostUptime", { value: uptime(data.host.uptimeSeconds, t) })}
         </Text>
@@ -118,7 +125,7 @@ function HyperVContent({
   );
 }
 
-function Metric({ label, value, detail }: { label: string; value: number; detail: string }) {
+function Metric({ label, value, detail }: { label: string; value: number | null; detail: string }) {
   return (
     <Stack gap={4}>
       <Group justify="space-between" gap="xs">
@@ -126,15 +133,17 @@ function Metric({ label, value, detail }: { label: string; value: number; detail
           {label}
         </Text>
         <Text size="sm" fw={600}>
-          {value.toFixed(1)}%
+          {value === null ? "—" : `${value.toFixed(1)}%`}
         </Text>
       </Group>
-      <Progress
-        value={Math.min(100, Math.max(0, value))}
-        size="sm"
-        color={value >= 90 ? "orange" : "blue"}
-        aria-label={label}
-      />
+      {value !== null && (
+        <Progress
+          value={Math.min(100, Math.max(0, value))}
+          size="sm"
+          color={value >= 90 ? "orange" : "blue"}
+          aria-label={label}
+        />
+      )}
       <Text size="xs" c="dimmed">
         {detail}
       </Text>
@@ -148,6 +157,7 @@ function VmRow({ vm, narrow }: { vm: HyperVSnapshot["virtualMachines"][number]; 
   const demand = vm.memoryDemandBytes === null ? "—" : formatBytes(vm.memoryDemandBytes);
   const assigned = formatBytes(vm.memoryAssignedBytes);
   const cpu = vm.state === "Running" ? vm.cpuUsagePercent : 0;
+  const hasGpu = vm.gpuPartitionCount !== undefined && vm.gpuPartitionCount !== 0;
   const stateLabel =
     vm.state === "Running"
       ? t("state.running")
@@ -172,6 +182,7 @@ function VmRow({ vm, narrow }: { vm: HyperVSnapshot["virtualMachines"][number]; 
           </Group>
           <Group gap="sm">
             <Text size="xs">CPU {cpu.toFixed(1)}%</Text>
+            {hasGpu && <Text size="xs">GPU {vm.gpuUsagePercent == null ? "—" : `${vm.gpuUsagePercent.toFixed(1)}%`}</Text>}
             <Text size="xs">
               {t("memoryDemandAssigned")} {demand} / {assigned}
             </Text>
@@ -183,8 +194,16 @@ function VmRow({ vm, narrow }: { vm: HyperVSnapshot["virtualMachines"][number]; 
           <Text size="xs" c="dimmed">
             {t(vm.memoryDemandBytes === null ? "memoryUnavailable" : "memoryExplanation")}
           </Text>
+          {hasGpu && (
+            <Text size="xs" c="dimmed">
+              {t(vm.gpuUsagePercent == null ? "gpuUnavailable" : "gpuExplanation")}
+            </Text>
+          )}
           <SimpleGrid cols={narrow ? 1 : 2} spacing="xs">
             <Detail label={t("virtualProcessors")} value={String(vm.processorCount)} />
+            {vm.gpuPartitionCount !== undefined && (
+              <Detail label={t("gpuPartitions")} value={vm.gpuPartitionCount === null ? "—" : String(vm.gpuPartitionCount)} />
+            )}
             <Detail label={t("uptime")} value={uptime(vm.uptimeSeconds, t)} />
             <Detail label={t("startupMemory")} value={formatBytes(vm.memoryStartupBytes)} />
             <Detail label={t("dynamicMemory")} value={t(vm.dynamicMemoryEnabled ? "enabled" : "disabled")} />

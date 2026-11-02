@@ -1,97 +1,149 @@
 # Homarr Hyper-V Monitor
 
-在 Homarr 顯示 Windows Hyper-V 主機及個別 VM 的 CPU、RAM、狀態與 uptime。
-包含獨立的 Windows agent、原生 **Hyper-V integration** 與 **Hyper-V widget**。
+**Read-only Hyper-V host and VM monitoring for Homarr, including GPU-PV utilization.**
 
-這是自行維護的 Homarr 擴充，基於 **Homarr 2.10.1**，不是官方內建功能或可從 Workshop 匯入的 Custom JSX widget。需要使用本專案建置的 Homarr image。
+[![Release](https://img.shields.io/github/v/release/takidog/homarr-hyperV-monitor)](https://github.com/takidog/homarr-hyperV-monitor/releases)
+[![Build](https://github.com/takidog/homarr-hyperV-monitor/actions/workflows/build.yml/badge.svg)](https://github.com/takidog/homarr-hyperV-monitor/actions/workflows/build.yml)
+[![License](https://img.shields.io/github/license/takidog/homarr-hyperV-monitor)](LICENSE)
 
-## 功能
+**English** · [繁體中文](README.zh-TW.md)
 
-- 主機 CPU（包含 guest 負載）、RAM、uptime、執行中 VM 數量。
-- 每台 VM 的 CPU、記憶體需求／配置、原始狀態；進階檢視提供 vCPU、Dynamic Memory、啟動／最小／最大 RAM 與 VM ID。
-- 可隱藏停止的 VM，並選擇顯示主機的本機磁碟容量。
-- 每個 widget 可自行設定 **Host display name／主機顯示名稱**；留空使用 Windows 主機名稱，不會修改 Windows 設定。
-- 自動輪詢；連線失敗或資料過期時顯示錯誤，恢復後自動更新。
-- 英文及繁體中文介面。
+A native **Hyper-V integration and widget** for Homarr, backed by a configurable **Go agent** on Windows. Monitor your host and its VMs without installing agents inside the guests.
 
-## 畫面
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" width="282" alt="Compact Hyper-V widget showing host and VM CPU, memory, status and uptime">
+</p>
 
-以下是實際執行中的 Homarr 截圖，僅擷取可公開的介面區域；VM 名稱、ID、連線設定與 token 未包含在圖片中。
+<p align="center"><sub>Screenshot provided by the project owner. This v0.1 layout is extended with GPU readings in v0.2.</sub></p>
 
-![Host CPU 與 RAM](docs/screenshots/host-metrics.png)
+[Quick start](#quick-start) · [GPU-PV monitoring](#gpu-pv-monitoring) · [Agent configuration](agent/README.md) · [Releases](https://github.com/takidog/homarr-hyperV-monitor/releases)
 
-![自訂 Host 名稱與 widget 選項](docs/screenshots/widget-settings.png)
+## Features
 
-## 架構
+- **Host metrics:** CPU including guest workloads, RAM, GPU utilization, uptime and running VM count.
+- **Per-VM metrics:** CPU, memory demand and assignment, GPU-PV utilization, state, uptime and configuration details.
+- **Custom host names:** choose a display name for each widget, with the Windows hostname as the default.
+- **Flexible layout:** compact and advanced views, optional stopped VMs and host storage, English and Traditional Chinese UI.
+- **Standalone Windows agent:** one Go exe with persisted CLI settings, bearer-token authentication, HTTPS and optional automatic startup.
+- **Fresh data:** automatic polling, timeouts and explicit unavailable states instead of presenting stale values as current.
 
-```text
-Hyper-V host                         Homarr server
-Go agent ───────── HTTPS + token ──> Hyper-V integration ──> Hyper-V widget
-  Get-VM + local CIM                   authenticated polling
-```
+## Requirements
 
-箭頭表示資料流；連線由 Homarr 發起。Agent 只有 `GET /api/v1/snapshot`，不提供啟停 VM 或遠端執行指令。
+| Component | Requirement |
+| --- | --- |
+| Windows host | Hyper-V role, Hyper-V PowerShell management tools, Windows PowerShell 5.1 and administrative access |
+| GPU monitoring | WDDM GPU Engine counters; per-VM readings additionally require GPU-PV and counters attributed to the VM worker process |
+| Homarr | This project's custom image, based on **Homarr 2.10.1**; published for `linux/amd64` |
+| Agent binary | Windows `amd64`; no Go runtime or separate collector script required |
 
-**Agent 是 Go 編譯的單一 Windows exe**，內嵌 PowerShell 5.1 collector 呼叫 Hyper-V 管理工具。HTTP、token、TLS、排程及設定儲存由 Go 處理，不需要 username/password。安裝程式可建立以 SYSTEM 執行的開機排程，並以 ACL 保護 exe、設定和私鑰。
+This is an independent extension, not an official Homarr integration or a Workshop import. The native integration and widget must be built into Homarr together.
 
-## 安裝
+## Quick start
 
-### 1. Windows agent
+### 1. Configure the Windows agent
 
-從 [Releases](https://github.com/takidog/homarr-hyperV-monitor/releases) 下載 Windows amd64 zip，解壓後在系統管理員終端執行：
+Download the Windows amd64 zip from [Releases](https://github.com/takidog/homarr-hyperV-monitor/releases), extract it and open an elevated terminal:
 
 ```powershell
 .\hyperv-monitor.exe configure --bind 127.0.0.1 --port 9276
 .\hyperv-monitor.exe
 ```
 
-第一次設定儲存到 `~/.homarr-hyperv-monitor/config.json`，後續直接執行 exe 即可。預設自動產生 token；也支援 `--token`、`--token-file`、自訂 `--config` 路徑與採樣間隔。
+Settings are saved to `~/.homarr-hyperv-monitor/config.json`. Later launches need no arguments. A random token is generated automatically; `--token` and `--token-file` let you supply your own. The agent uses no username/password login.
 
-跨機器連線可用 `--generate-tls` 產生對應綁定 IP 的憑證，再將公開的 `server.crt` 放入 Homarr trusted certificates。只開放 Homarr 伺服器來源 IP。確認可連線後，執行 `Install-HyperVAgent.ps1` 安裝開機排程。完整 HTTPS、防火牆、更新、token 輪替及移除方式見 [agent 文件](agent/README.md)。
+The default listener is local-only. For a separate Homarr server, use a reachable IP and HTTPS:
 
-### 2. Homarr image
+```powershell
+# Replace this documentation address with the Windows host's actual IP.
+.\hyperv-monitor.exe configure --force --bind 192.0.2.10 --port 9276 --generate-tls
+.\hyperv-monitor.exe
+```
 
-先備份原有 Compose 與完整 `/appdata`（SQLite 請停止容器後備份），保留原本的 `SECRET_ENCRYPTION_KEY`、volume、port、network 與其他設定。將 Homarr service 的 image 改為：
+Copy **only `server.crt`** to Homarr's `/appdata/trusted-certificates/` and restart Homarr. Keep `config.json` and `server.key` private. Restrict the Windows firewall to the Homarr server's source IP. See the [agent guide](agent/README.md#https-across-machines) for existing certificates, firewall examples and token management.
+
+After checking the connection, stop the foreground agent and install automatic startup:
+
+```powershell
+.\Install-HyperVAgent.ps1
+```
+
+The scheduled task runs as SYSTEM and reads a protected copy of the configuration in `%ProgramData%\Homarr Hyper-V Agent`. Updating the home-directory config does not change that installed copy; use the [update instructions](agent/README.md#start-automatically).
+
+### 2. Run Homarr with the extension
+
+Back up your Compose file and `/appdata` first. For SQLite, use an online SQLite backup or stop Homarr for a consistent file backup. Preserve the existing encryption key, volumes, ports, networks and other environment settings. Change only the Homarr service image:
 
 ```yaml
 image: ghcr.io/takidog/homarr-hyperv-monitor:latest
 ```
-
-正式部署建議改用 Actions 產生的 commit tag 或 image digest 固定版本。提供 `linux/amd64` image。勿使用新的加密金鑰啟動既有資料，否則原有整合憑證無法解密。
 
 ```sh
 docker compose pull homarr
 docker compose up -d --no-deps homarr
 ```
 
-如需回復，還原原本 image；若已變更資料庫內容則同時還原配對的 `/appdata` 備份。此擴充沒有新增 migration。
+Pin a commit tag or image digest in production. Replacing `SECRET_ENCRYPTION_KEY` prevents Homarr from decrypting existing integration credentials. This extension adds no database migration; keep the old image and matching backup for rollback.
 
-### 3. Integration 與 widget
+### 3. Connect the widget
 
-由具有整合管理權限的帳號，在 Homarr 管理區新增 **Hyper-V** integration，填寫 agent 的可連線 origin 和 API key。憑證若由私人 CA 簽發，將 CA 加入 Homarr 的 trusted certificates。測試成功後在面板加入 **Hyper-V** widget，選擇 integration 並填入想顯示的 Host 名稱。每台 Windows host 各建立一個 integration。
+In Homarr, create a **Hyper-V** integration with the agent's reachable origin and the `token` from its config. Then add a **Hyper-V** widget, select the integration and optionally set **Host display name**. Create one integration per host.
 
-## 原始碼與建置
+The account needs permission to create integrations and use the chosen integration. If the Integrations section is missing, check its group permissions. A container's `localhost` refers to the container, not the Windows host.
 
-| 位置 | 內容 |
-| --- | --- |
-| `agent/` | Go exe 原始碼、內嵌 Windows collector、安裝程式 |
-| `homarr/overlay/packages/integrations/src/hyperv/` | 驗證 snapshot、token 認證、timeout 與資料新鮮度檢查 |
-| `homarr/overlay/packages/widgets/src/hyperv/` | Widget UI 與選項 |
-| `homarr/overlay/packages/api/`、`packages/request-handler/` | tRPC 與快取 |
-| `homarr/registration.patch` | Homarr 既有註冊點、翻譯及測試 allowlist 的修改 |
-| `homarr/upstream.json` | 固定的上游版本與 commit |
+## GPU-PV monitoring
 
-需要 Python 3、Git 與支援現代 BuildKit 的 Docker：
+The agent reads Windows **GPU Engine** counters and maps their process IDs to Hyper-V VM worker processes through `Msvm_ComputerSystem.ProcessID`. It adds process/context activity on the **same physical engine**, then reports the busiest engine. Independent engines and GPUs are not added together.
+
+- **Host GPU:** the busiest physical GPU engine across the host, including guest workloads.
+- **VM GPU:** activity attributed to that VM's worker process; a share of physical-engine utilization, **not** utilization of its assigned GPU partition quota.
+- **Unavailable:** missing driver counters or an unmatched worker process display `—`, not a fabricated zero. GPU probe failures leave CPU/RAM collection available.
+- **Stopped VMs:** configured GPU-PV adapters remain visible in details; off/saved VMs report 0% GPU. VMs without GPU-PV adapters do not show a GPU usage field.
+
+Counter availability and attribution depend on Windows and the driver. This was verified on a Windows Hyper-V host with GPU-PV. It does not claim GPU passthrough/DDA monitoring or per-VM VRAM accounting. GPU Engine counters are integer percentages; small per-context loads may be rounded down.
+
+References: [Microsoft's GPU utilization model](https://devblogs.microsoft.com/directx/gpus-in-the-task-manager/), [GPU paravirtualization](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/gpu-paravirtualization), [VM worker process mapping](https://learn.microsoft.com/en-us/windows/win32/hyperv_v2/msvm-computersystem).
+
+## Metric semantics and limits
+
+VM CPU is relative to its assigned virtual processors. VM RAM is Hyper-V's `MemoryDemand / MemoryAssigned`, not an exact sum of guest processes. Unknown demand displays `—`; stopped VMs retain their startup-memory configuration while assigned memory is zero.
+
+Host storage covers local fixed volumes. Guest filesystems, VHD usage, network/disk I/O, historical charts and Failover Cluster discovery are outside the current scope. The API is read-only and provides no VM control or remote command endpoint. See [metric details and troubleshooting](agent/README.md#metrics-and-limitations).
+
+## Build from source
+
+The agent embeds its PowerShell collector; HTTP, authentication, configuration, TLS, scheduling and timeouts are implemented in Go.
+
+```powershell
+# On Windows, with Go 1.25 or newer
+cd agent
+go test ./...
+go vet ./...
+go build -trimpath -ldflags '-s -w -X main.version=0.2.0' -o hyperv-monitor.exe .
+```
+
+For Homarr, install Python 3, Git and Docker with modern BuildKit:
 
 ```sh
 python3 scripts/prepare.py
 docker buildx build --load -t homarr-hyperv:local .build/homarr
 ```
 
-Prepare 會下載固定上游 commit、檢查並套用 patch，再加入 extension 原始碼。目的目錄已存在時會拒絕覆寫。GitHub Actions 使用相同流程建置並發佈 GHCR image；不需要上傳 Windows host 的任何帳密。
+`prepare.py` fetches the pinned upstream commit, checks and applies the registration patch, then copies the extension source. It refuses to overwrite an existing destination. GitHub Actions publishes images using the same build process.
 
-## 指標範圍
+| Path | Contents |
+| --- | --- |
+| `agent/` | Go agent, embedded collector and startup installer |
+| `homarr/overlay/packages/integrations/src/hyperv/` | Snapshot validation and authenticated HTTP client |
+| `homarr/overlay/packages/widgets/src/hyperv/` | Native widget and options |
+| `homarr/overlay/packages/api/` | tRPC endpoint |
+| `homarr/overlay/packages/request-handler/` | Request cache |
+| `homarr/registration.patch` | Registrations, translations and existing test allowlist changes |
+| `homarr/upstream.json` | Pinned Homarr version and commit |
 
-VM CPU 是該 VM 虛擬處理器的使用率；VM RAM 是 Hyper-V 的 `MemoryDemand / MemoryAssigned`，不是 guest 內 process 的精確加總。沒有需求資料時顯示 unknown，停止的 VM 配置用量是 0。此版本不包含 VM 內檔案系統、VHD 用量、網路／磁碟 I/O 或叢集自動探索。完整語意與故障排除見 [agent 文件](agent/README.md#metrics-and-limitations)。
+## Contributing
 
-Apache-2.0；基於 [Homarr](https://github.com/homarr-labs/homarr)。實作使用 AI 協助開發。
+Bug reports and focused pull requests are welcome. Include Windows/driver versions, agent version and expected versus actual behavior. Redact tokens, private keys and private infrastructure details from logs and screenshots. For GPU issues, distinguish host readings from individual VM readings and identify whether GPU-PV is configured.
+
+## License
+
+[Apache-2.0](LICENSE). Built on [Homarr](https://github.com/homarr-labs/homarr); see [NOTICE](NOTICE). Developed with AI assistance.

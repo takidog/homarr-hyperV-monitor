@@ -71,7 +71,7 @@ On Windows with Go 1.25 or newer (release built with Go 1.27.3):
 cd agent
 go test ./...
 go vet ./...
-go build -trimpath -ldflags '-s -w -X main.version=0.1.0' -o hyperv-monitor.exe .
+go build -trimpath -ldflags '-s -w -X main.version=0.2.0' -o hyperv-monitor.exe .
 ```
 
 The binary is not Authenticode-signed. Releases include SHA-256 checksums. The source has no third-party Go dependencies. Tests cover token rejection, method/path restrictions, stale/failed sample rejection and remote HTTP opt-in; real Hyper-V collection and SYSTEM startup were also checked on a Windows host.
@@ -83,6 +83,7 @@ The binary is not Authenticode-signed. Releases include SHA-256 checksums. The s
 | Host CPU          | CIM `Win32_PerfFormattedData_HvStats_HyperVHypervisorLogicalProcessor`, `_Total.PercentTotalRunTime`; includes guests and the management OS, normalized to 0–100%.                                                                                       |
 | Host RAM          | `Win32_OperatingSystem` total visible physical memory minus free physical memory; KiB converted to bytes.                                                                                                                                                |
 | VM CPU            | `Get-VM.CPUUsage`, percent of that VM's allocated virtual processors; not percent of the entire host.                                                                                                                                                    |
+| GPU / GPU-PV | WDDM `GPU Engine` counters, summed per physical engine and reduced to the busiest engine. VM readings use `Msvm_ComputerSystem.ProcessID` to attribute worker-process activity. This is physical-engine utilization, not GPU partition quota utilization. Unavailable counters/mappings return null; Off/Saved VMs with assigned GPU-PV adapters report zero. No VRAM or DDA metrics. |
 | VM RAM            | `MemoryDemand / MemoryAssigned`. Demand is Hyper-V's guest memory estimate, not an exact guest process working-set total. Demand can exceed assignment under pressure. Running guests reporting zero demand display unknown rather than a misleading 0%. |
 | VM configuration  | Startup, minimum/maximum RAM and Dynamic Memory flag, all in bytes. An off VM has no assigned RAM; its configured startup RAM remains visible.                                                                                                           |
 | VM identity/state | GUID (stable across renames), the original Hyper-V state, and uptime in seconds. Only `Running` counts as running; paused/saved/off states are retained.                                                                                                 |
@@ -93,3 +94,5 @@ Add one integration per host. Collection runs locally every 10 seconds after the
 For collection failures, run `Collect-HyperVSnapshot.ps1` directly as the same account. Confirm `Get-VM` and the Hyper-V logical processor CIM counters work. Host counter failures must be fixed instead of substituting management-OS CPU readings. Run the exe with its active config in an elevated terminal to inspect launch/collection errors. The startup task's Last Run Result diagnoses launch failures; a 503 diagnoses collection failure or warm-up.
 
 References: [Get-VM](https://learn.microsoft.com/en-us/powershell/module/hyper-v/get-vm), [Hyper-V performance counters](https://learn.microsoft.com/en-us/windows-server/administration/performance-tuning/role/hyper-v-server/detecting-virtualized-environment-bottlenecks), [Windows Admin Center VM metrics](https://learn.microsoft.com/en-us/windows-server/manage/windows-admin-center/use/manage-virtual-machines).
+
+GPU metrics require agent v0.2 or later and matching widget code. Older snapshots remain valid; the GPU fields are optional. GPU probe failures do not fail CPU/RAM sampling. WDDM counters are integer percentages, so small per-context loads can be rounded down. See the [GPU-PV notes](../README.md#gpu-pv-monitoring) for attribution and driver limitations.
