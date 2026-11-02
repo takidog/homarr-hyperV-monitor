@@ -11,10 +11,20 @@
 接入 Homarr 原生**系統健康監測 widget 的 Hyper-V integration**，搭配 Windows 上可設定的 **Go agent**。從主機取得各 VM 的資源使用情況，不需要在 guest 內另外安裝 agent。
 
 <p align="center">
+  <img src="docs/screenshots/native-system.png" width="360" alt="原生系統分頁：主機 CPU、RAM、GPU 儀表">
+  <img src="docs/screenshots/native-cluster.png" width="360" alt="原生叢集分頁：Hyper-V 主機與 VM 的 CPU、RAM、GPU-PV 用量">
+</p>
+
+<details>
+<summary>可選的獨立 Hyper-V widget</summary>
+
+<p align="center">
   <img src="docs/screenshots/dashboard.png" width="282" alt="Hyper-V 小工具顯示主機與 VM 的 CPU、記憶體、狀態及運行時間">
 </p>
 
 <p align="center"><sub>專案作者提供的獨立 widget 截圖。目前建議使用 Homarr 原生「系統健康監測」widget；獨立版仍可使用。</sub></p>
+
+</details>
 
 [快速開始](#快速開始) · [GPU-PV 監測](#gpu-pv-監測) · [Agent 設定](agent/README.md) · [下載](https://github.com/takidog/homarr-hyperV-monitor/releases)
 

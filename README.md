@@ -11,10 +11,20 @@
 A **Hyper-V integration for Homarr's built-in System Health Monitoring widget**, backed by a configurable **Go agent** on Windows. Monitor your host and its VMs without installing agents inside the guests.
 
 <p align="center">
+  <img src="docs/screenshots/native-system.png" width="360" alt="Native System tab with host CPU, RAM and GPU gauges">
+  <img src="docs/screenshots/native-cluster.png" width="360" alt="Native Cluster tab with Hyper-V host and VM CPU, RAM and GPU-PV usage">
+</p>
+
+<details>
+<summary>Optional dedicated Hyper-V widget</summary>
+
+<p align="center">
   <img src="docs/screenshots/dashboard.png" width="282" alt="Compact Hyper-V widget showing host and VM CPU, memory, status and uptime">
 </p>
 
 <p align="center"><sub>Project owner's screenshot of the optional dedicated widget. The recommended view now uses Homarr's built-in System Health Monitoring widget.</sub></p>
+
+</details>
 
 [Quick start](#quick-start) · [GPU-PV monitoring](#gpu-pv-monitoring) · [Agent configuration](agent/README.md) · [Releases](https://github.com/takidog/homarr-hyperV-monitor/releases)
 
