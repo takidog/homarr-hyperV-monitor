@@ -8,22 +8,23 @@
 
 **English** · [繁體中文](README.zh-TW.md)
 
-A native **Hyper-V integration and widget** for Homarr, backed by a configurable **Go agent** on Windows. Monitor your host and its VMs without installing agents inside the guests.
+A **Hyper-V integration for Homarr's built-in System Health Monitoring widget**, backed by a configurable **Go agent** on Windows. Monitor your host and its VMs without installing agents inside the guests.
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" width="282" alt="Compact Hyper-V widget showing host and VM CPU, memory, status and uptime">
 </p>
 
-<p align="center"><sub>Screenshot provided by the project owner. This v0.1 layout is extended with GPU readings in v0.2.</sub></p>
+<p align="center"><sub>Project owner's screenshot of the optional dedicated widget. The recommended view now uses Homarr's built-in System Health Monitoring widget.</sub></p>
 
 [Quick start](#quick-start) · [GPU-PV monitoring](#gpu-pv-monitoring) · [Agent configuration](agent/README.md) · [Releases](https://github.com/takidog/homarr-hyperV-monitor/releases)
 
 ## Features
 
+- **Native Homarr UI:** System tab with host gauges; Cluster tab with host, VM and storage lists, including GPU-PV usage.
 - **Host metrics:** CPU including guest workloads, RAM, GPU utilization, uptime and running VM count.
 - **Per-VM metrics:** CPU, memory demand and assignment, GPU-PV utilization, state, uptime and configuration details.
-- **Custom host names:** choose a display name for each widget, with the Windows hostname as the default.
-- **Flexible layout:** compact and advanced views, optional stopped VMs and host storage, English and Traditional Chinese UI.
+- **Custom host names:** rename the integration to name the host in the native widget. The optional dedicated widget also has a per-widget host name.
+- **Flexible layout:** native compact and advanced views, configurable cluster sections, English and Traditional Chinese UI. The dedicated widget remains compatible with existing boards.
 - **Standalone Windows agent:** one Go exe with persisted CLI settings, bearer-token authentication, HTTPS and optional automatic startup.
 - **Fresh data:** automatic polling, timeouts and explicit unavailable states instead of presenting stale values as current.
 
@@ -36,7 +37,7 @@ A native **Hyper-V integration and widget** for Homarr, backed by a configurable
 | Homarr | This project's custom image, based on **Homarr 2.10.1**; published for `linux/amd64` |
 | Agent binary | Windows `amd64`; no Go runtime or separate collector script required |
 
-This is an independent extension, not an official Homarr integration or a Workshop import. The native integration and widget must be built into Homarr together.
+This is an independent extension, not an official Homarr integration or a Workshop import. The integration adapter must be built into Homarr; stock Homarr does not yet include this extension.
 
 ## Quick start
 
@@ -86,7 +87,12 @@ Pin a commit tag or image digest in production. Replacing `SECRET_ENCRYPTION_KEY
 
 ### 3. Connect the widget
 
-In Homarr, create a **Hyper-V** integration with the agent's reachable origin and the `token` from its config. Then add a **Hyper-V** widget, select the integration and optionally set **Host display name**. Create one integration per host.
+In Homarr, create a **Hyper-V** integration with the agent's reachable origin and the `token` from its config. Then add the built-in **System Health Monitoring** widget and select that integration. Create one integration per host and use its name as the host display name.
+
+- **System:** CPU, RAM and available host GPU gauges, plus local storage.
+- **Cluster:** the host and individual VMs, with CPU, RAM and GPU-PV usage; click a row for details. Hide **LXCs** in the visible cluster sections for Hyper-V.
+
+Agent **v0.2.0** already supplies these metrics; this UI update needs no agent reinstall. Existing dedicated Hyper-V widgets continue to work, including their per-widget host names and additional VM configuration details.
 
 The account needs permission to create integrations and use the chosen integration. If the Integrations section is missing, check its group permissions. A container's `localhost` refers to the container, not the Windows host.
 
@@ -96,7 +102,7 @@ The agent reads Windows **GPU Engine** counters and maps their process IDs to Hy
 
 - **Host GPU:** the busiest physical GPU engine across the host, including guest workloads.
 - **VM GPU:** activity attributed to that VM's worker process; a share of physical-engine utilization, **not** utilization of its assigned GPU partition quota.
-- **Unavailable:** missing driver counters or an unmatched worker process display `—`, not a fabricated zero. GPU probe failures leave CPU/RAM collection available.
+- **Unavailable:** missing VM counters or an unmatched worker process display `—`, not a fabricated zero. The native host gauge is hidden when GPU counters are unavailable; unreported VRAM is omitted. GPU probe failures leave CPU/RAM collection available.
 - **Stopped VMs:** configured GPU-PV adapters remain visible in details; off/saved VMs report 0% GPU. VMs without GPU-PV adapters do not show a GPU usage field.
 
 Counter availability and attribution depend on Windows and the driver. This was verified on a Windows Hyper-V host with GPU-PV. It does not claim GPU passthrough/DDA monitoring or per-VM VRAM accounting. GPU Engine counters are integer percentages; small per-context loads may be rounded down.
@@ -107,7 +113,7 @@ References: [Microsoft's GPU utilization model](https://devblogs.microsoft.com/d
 
 VM CPU is relative to its assigned virtual processors. VM RAM is Hyper-V's `MemoryDemand / MemoryAssigned`, not an exact sum of guest processes. Unknown demand displays `—`; stopped VMs retain their startup-memory configuration while assigned memory is zero.
 
-Host storage covers local fixed volumes. Guest filesystems, VHD usage, network/disk I/O, historical charts and Failover Cluster discovery are outside the current scope. The API is read-only and provides no VM control or remote command endpoint. See [metric details and troubleshooting](agent/README.md#metrics-and-limitations).
+Host storage covers local fixed volumes. Guest filesystems, VHD usage, network/disk I/O, persistent history and Failover Cluster discovery are outside the current scope. The API is read-only and provides no VM control or remote command endpoint. See [metric details and troubleshooting](agent/README.md#metrics-and-limitations).
 
 ## Build from source
 
@@ -133,8 +139,8 @@ docker buildx build --load -t homarr-hyperv:local .build/homarr
 | Path | Contents |
 | --- | --- |
 | `agent/` | Go agent, embedded collector and startup installer |
-| `homarr/overlay/packages/integrations/src/hyperv/` | Snapshot validation and authenticated HTTP client |
-| `homarr/overlay/packages/widgets/src/hyperv/` | Native widget and options |
+| `homarr/overlay/packages/integrations/src/hyperv/` | Snapshot validation, authenticated client and native health adapters |
+| `homarr/overlay/packages/widgets/src/hyperv/` | Optional dedicated widget and options |
 | `homarr/overlay/packages/api/` | tRPC endpoint |
 | `homarr/overlay/packages/request-handler/` | Request cache |
 | `homarr/registration.patch` | Registrations, translations and existing test allowlist changes |

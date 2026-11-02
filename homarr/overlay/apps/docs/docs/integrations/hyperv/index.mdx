@@ -8,18 +8,23 @@ import { IntegrationHeader } from "@site/src/components/integrations/header";
 import { IntegrationCapabilites } from "@site/src/components/integrations/widgets";
 import { IntegrationSecrets } from "@site/src/components/integrations/secrets";
 import { hypervIntegration } from ".";
+import { healthMonitoringWidget } from "@site/docs/widgets/health-monitoring";
 import { hypervWidget } from "@site/docs/widgets/hyperv";
 
 <IntegrationHeader integration={hypervIntegration} categories={["System monitoring"]} />
 
 ### Widgets and capabilities
 
-<IntegrationCapabilites items={[{ widget: hypervWidget }]} />
+<IntegrationCapabilites items={[{ widget: healthMonitoringWidget }, { widget: hypervWidget }]} />
+
+Use the native **System Health Monitoring** widget for host gauges and the **Cluster** VM list.
+The integration name is the host display name. Hyper-V does not have LXC containers; hide that section in the widget options.
+The dedicated Hyper-V widget remains available for existing boards and extra VM configuration details.
 
 ### Agent setup
 
-Run the Go agent on each Windows Hyper-V host. The Hyper-V role, PowerShell management tools and administrative
-access are required. The [agent installation guide](https://github.com/takidog/homarr-hyperV-monitor/tree/main/agent)
+Run the PowerShell agent on each Windows Hyper-V host. The Hyper-V role, PowerShell management tools and administrative
+access are required. The [agent installation guide](https://github.com/homarr-labs/homarr/tree/dev/tools/hyperv-agent)
 covers foreground use, the startup task, TLS, firewall access and token rotation.
 
 Use the agent's reachable HTTP(S) origin as the integration URL (port 9276 by default). The default listener accepts
@@ -29,12 +34,12 @@ does not refer to the Hyper-V host. Add a separate integration for each host.
 ### Secrets
 
 <IntegrationSecrets
-  secrets={[{ credentials: ["apiKey"], steps: ["Use the token from the agent's config.json file."] }]}
+  secrets={[{ credentials: ["apiKey"], steps: ["Use the random token from the agent's API key file."] }]}
 />
 
 ### Reading memory and CPU
 
-Host CPU includes guest workloads. VM CPU is relative to the VM's assigned virtual processors. VM RAM shows
+Host CPU includes guest workloads. VM CPU is relative to the VM's assigned virtual processors. VM RAM is memory
 **memory demand alongside assigned memory**. Demand can exceed assignment under pressure. It is an estimate from Hyper-V, not
 an exact guest process memory total. Unavailable guest telemetry displays a dash; startup RAM and Dynamic Memory
 limits are available in VM details. Off VMs have zero assigned RAM.
@@ -44,5 +49,3 @@ does not discover Failover Clusters or provide VM control actions.
 
 If the agent cannot collect data, it returns 503 instead of keeping the last successful values. Allow a few seconds
 for the first sample and keep the host and Homarr clocks synchronized. A sample older than 60 seconds is rejected.
-
-GPU-PV monitoring requires agent v0.2 or later and WDDM GPU Engine counters. GPU usage is the busiest physical engine, not the partition quota. VM usage is attributed through the Hyper-V worker process. Missing counters display a dash; GPU probing failures do not interrupt CPU/RAM sampling.

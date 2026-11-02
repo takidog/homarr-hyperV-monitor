@@ -5,9 +5,25 @@ import type { IntegrationTestingInput } from "../base/integration";
 import { Integration } from "../base/integration";
 import { TestConnectionError } from "../base/test-connection/test-connection-error";
 import type { TestingResult } from "../base/test-connection/test-connection-service";
+import type {
+  IClusterHealthMonitoringIntegration,
+  ISystemHealthMonitoringIntegration,
+} from "../interfaces/health-monitoring/health-monitoring-integration";
+import { toClusterHealth, toSystemHealth } from "./health-monitoring";
 import { hypervSnapshotSchema } from "./hyperv-types";
 
-export class HyperVIntegration extends Integration {
+export class HyperVIntegration
+  extends Integration
+  implements ISystemHealthMonitoringIntegration, IClusterHealthMonitoringIntegration
+{
+  public async getSystemInfoAsync() {
+    return toSystemHealth(await this.getSummaryAsync());
+  }
+
+  public async getClusterInfoAsync() {
+    return toClusterHealth(await this.getSummaryAsync(), this.integration.name);
+  }
+
   protected async testingAsync(input: IntegrationTestingInput): Promise<TestingResult> {
     const response = await input.fetchAsync(this.url("/api/v1/snapshot"), {
       headers: this.authHeaders(),

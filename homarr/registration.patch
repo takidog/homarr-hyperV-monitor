@@ -18,6 +18,28 @@ index df622bc..1499f2f 100644
    mediaRequests: mediaRequestsRouter,
    mediaServer: mediaServerRouter,
    mediaOrganizer: mediaOrganizerRouter,
+diff --git a/packages/api/src/router/widgets/health-monitoring.ts b/packages/api/src/router/widgets/health-monitoring.ts
+index 3f5965e..e23e52d 100644
+--- a/packages/api/src/router/widgets/health-monitoring.ts
++++ b/packages/api/src/router/widgets/health-monitoring.ts
+@@ -21,7 +21,7 @@ export const healthMonitoringRouter = createTRPCRouter({
+       mcp: {
+         enabled: true,
+         description:
+-          "Get system health status (CPU, memory, disk, network) from NAS/server monitoring integrations. REQUIRED: integrationIds (array of TrueNAS/Synology/Unraid/Glances/OpenMediaVault/DashDot integration IDs from integration_all)",
++          "Get system health status (CPU, memory, disk, network) from NAS/server monitoring integrations. REQUIRED: integrationIds (array of Hyper-V/TrueNAS/Synology/Unraid/Glances/OpenMediaVault/DashDot integration IDs from integration_all)",
+       },
+     })
+     .concat(createManyIntegrationMiddleware("query", ...healthMonitoringSystemIntegrationKinds))
+@@ -66,7 +66,7 @@ export const healthMonitoringRouter = createTRPCRouter({
+       mcp: {
+         enabled: true,
+         description:
+-          "Get Proxmox cluster health status including nodes, VMs, and resource usage. REQUIRED: integrationId (single Proxmox integration ID from integration_all)",
++          "Get Proxmox or Hyper-V host and VM health including CPU, memory and available GPU usage. REQUIRED: integrationId (single Proxmox or Hyper-V integration ID from integration_all). Requires query permission for that integration.",
+       },
+     })
+     .concat(createOneIntegrationMiddleware("query", ...healthMonitoringClusterIntegrationKinds))
 diff --git a/packages/api/src/router/widgets/index.ts b/packages/api/src/router/widgets/index.ts
 index 63cae96..f868bc2 100644
 --- a/packages/api/src/router/widgets/index.ts
@@ -75,7 +97,7 @@ index 4e64405..8aec9e0 100644
    weather: "weather",
    airQuality: "air-quality",
 diff --git a/packages/definitions/src/integration.ts b/packages/definitions/src/integration.ts
-index 62fcd71..9f697e5 100644
+index 62fcd71..421d10d 100644
 --- a/packages/definitions/src/integration.ts
 +++ b/packages/definitions/src/integration.ts
 @@ -696,6 +696,15 @@ export const integrationDefs = {
@@ -87,18 +109,64 @@ index 62fcd71..9f697e5 100644
 +    name: "Hyper-V",
 +    secretKinds: [["apiKey"]],
 +    iconUrl: "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@master/svg/microsoft.svg",
-+    category: ["systemMonitoring"],
++    category: ["healthMonitoring", "systemMonitoring"],
 +    documentationSlug: "hyperv",
 +    defaultPort: 9276,
 +  },
    nextcloud: {
      httpAuth: { type: "adapter" },
      name: "Nextcloud",
+diff --git a/packages/definitions/src/test/widget-integration-map.spec.ts b/packages/definitions/src/test/widget-integration-map.spec.ts
+index a1833c7..ccd16ee 100644
+--- a/packages/definitions/src/test/widget-integration-map.spec.ts
++++ b/packages/definitions/src/test/widget-integration-map.spec.ts
+@@ -27,7 +27,9 @@ describe("widget integration config", () => {
+   });
+ 
+   test("supports the mock integration for every integration-backed widget", () => {
+-    for (const config of Object.values(widgetIntegrationConfigs)) {
++    // Hyper-V requires a real Windows agent and has no mock provider.
++    for (const [kind, config] of Object.entries(widgetIntegrationConfigs)) {
++      if (kind === "hyperv") continue;
+       expect(config.supportedIntegrations).toContain("mock");
+     }
+   });
+@@ -46,6 +48,7 @@ describe("widget integration config", () => {
+       "thingport-featuredModel": 1,
+       "thingport-activityHeatmap": 1,
+       patchmon: 1,
++      hyperv: 1,
+       bazarr: 1,
+       audioStats: 1,
+       umami: 1,
 diff --git a/packages/definitions/src/widget-integration-map.ts b/packages/definitions/src/widget-integration-map.ts
-index 96f69b5..573ba7e 100644
+index 96f69b5..bbbecc1 100644
 --- a/packages/definitions/src/widget-integration-map.ts
 +++ b/packages/definitions/src/widget-integration-map.ts
-@@ -172,6 +172,7 @@ export const widgetIntegrationConfigs = {
+@@ -24,11 +24,13 @@ const healthMonitoringGeneralIntegrationKinds = [
+ 
+ export const healthMonitoringSystemIntegrationKinds = [
+   ...healthMonitoringGeneralIntegrationKinds,
++  "hyperv",
+   "mock",
+ ] as const satisfies readonly IntegrationKind[];
+ 
+ export const healthMonitoringClusterIntegrationKinds = [
+   "proxmox",
++  "hyperv",
+   "mock",
+ ] as const satisfies readonly IntegrationKind[];
+ 
+@@ -156,7 +158,7 @@ export const widgetIntegrationConfigs = {
+   notifications: { supportedIntegrations: getIntegrationKindsByCategory("notifications") },
+   mediaReleases: { supportedIntegrations: ["mock", "emby", "jellyfin", "plex"] },
+   systemResources: {
+-    supportedIntegrations: [...healthMonitoringSystemIntegrationKinds],
++    supportedIntegrations: [...healthMonitoringGeneralIntegrationKinds, "mock"],
+   },
+   systemDisks: { supportedIntegrations: ["dashDot", "openmediavault", "truenas", "unraid", "synology", "mock"] },
+   beszelAlerts: { supportedIntegrations: ["beszel", "mock"] },
+@@ -172,6 +174,7 @@ export const widgetIntegrationConfigs = {
    "thingport-featuredModel": { supportedIntegrations: ["thingport", "mock"], maxIntegrations: 1 },
    "thingport-activityHeatmap": { supportedIntegrations: ["thingport", "mock"], maxIntegrations: 1 },
    patchmon: { supportedIntegrations: ["patchmon", "mock"], maxIntegrations: 1 },
@@ -139,6 +207,67 @@ index 7bd5649..7a6e9cb 100644
    emby: async (input: IntegrationInput) => new (await import("../emby/emby-integration")).EmbyIntegration(input),
    nextcloud: async (input: IntegrationInput) =>
      new (await import("../nextcloud/nextcloud.integration")).NextcloudIntegration(input),
+diff --git a/packages/integrations/src/interfaces/health-monitoring/health-monitoring-types.ts b/packages/integrations/src/interfaces/health-monitoring/health-monitoring-types.ts
+index d14dc32..68795d9 100644
+--- a/packages/integrations/src/interfaces/health-monitoring/health-monitoring-types.ts
++++ b/packages/integrations/src/interfaces/health-monitoring/health-monitoring-types.ts
+@@ -16,8 +16,8 @@ export interface SystemHealthMonitoring {
+     "5min": number;
+     "15min": number;
+   } | null;
+-  rebootRequired: boolean;
+-  availablePkgUpdates: number;
++  rebootRequired: boolean | null;
++  availablePkgUpdates: number | null;
+   cpuTemp: number | undefined;
+   fileSystem: {
+     deviceName: string;
+@@ -40,7 +40,7 @@ export interface SystemHealthMonitoring {
+   gpu: {
+     gpuId: string;
+     name: string;
+-    memoryUtilization: number;
++    memoryUtilization: number | null;
+     processorUtilization: number;
+     temperature: number | null;
+     fanSpeed: number | null;
+diff --git a/packages/integrations/src/proxmox/proxmox-types.ts b/packages/integrations/src/proxmox/proxmox-types.ts
+index 12808db..ff0d8fe 100644
+--- a/packages/integrations/src/proxmox/proxmox-types.ts
++++ b/packages/integrations/src/proxmox/proxmox-types.ts
+@@ -13,12 +13,12 @@ export interface ComputeResourceBase<TType extends string> extends ResourceBase<
+     cores: number; // previously cpuCores
+   };
+   memory: {
+-    used: number; // previously mem
++    used: number | null; // null when the provider cannot report usage
+     total: number; // previously maxMem
+   };
+   storage: {
+-    used: number; // previously disk
+-    total: number; // previously maxDisk
++    used: number | null;
++    total: number | null;
+     read: number | null; // previously diskRead
+     write: number | null; // previously diskWrite
+   };
+@@ -28,6 +28,7 @@ export interface ComputeResourceBase<TType extends string> extends ResourceBase<
+   };
+   uptime: number; // expressed in seconds
+   haState: string | null; // HA service status (for HA managed VMs).
++  gpuUsagePercent?: number | null; // absent when unsupported, null when unavailable
+ }
+ 
+ export type NodeResource = ComputeResourceBase<"node">;
+@@ -37,7 +38,7 @@ export interface LxcResource extends ComputeResourceBase<"lxc"> {
+ }
+ 
+ export interface QemuResource extends ComputeResourceBase<"qemu"> {
+-  vmId: number;
++  vmId: number | string;
+ }
+ 
+ export interface StorageResource extends ResourceBase<"storage"> {
 diff --git a/packages/integrations/src/types.ts b/packages/integrations/src/types.ts
 index 344ab6f..c818236 100644
 --- a/packages/integrations/src/types.ts
@@ -151,6 +280,19 @@ index 344ab6f..c818236 100644
  export * from "./unifi-controller/unifi-controller-types";
  export * from "./opnsense/opnsense-types";
  export * from "./interfaces/media-releases";
+diff --git a/packages/request-handler/src/health-monitoring.ts b/packages/request-handler/src/health-monitoring.ts
+index 36ed3f6..ce2a241 100644
+--- a/packages/request-handler/src/health-monitoring.ts
++++ b/packages/request-handler/src/health-monitoring.ts
+@@ -18,7 +18,7 @@ export const systemInfoRequestHandler = createIntegrationRequestHandler<
+ 
+ export const clusterInfoRequestHandler = createIntegrationRequestHandler<
+   ProxmoxClusterInfo,
+-  "proxmox" | "mock",
++  "proxmox" | "hyperv" | "mock",
+   Record<string, never>
+ >({
+   cacheNamespace: "health-monitoring:cluster-info",
 diff --git a/packages/translation/src/lang/en.json b/packages/translation/src/lang/en.json
 index c0bdd86..eaa33cd 100644
 --- a/packages/translation/src/lang/en.json
@@ -293,6 +435,301 @@ index 21733e6..e11bba6 100644
    stats: IconChartBar,
    clock: IconClock,
    weather: IconCloud,
+diff --git a/packages/widgets/src/health-monitoring/cluster/cluster-health.tsx b/packages/widgets/src/health-monitoring/cluster/cluster-health.tsx
+index 30814e9..6f9f460 100644
+--- a/packages/widgets/src/health-monitoring/cluster/cluster-health.tsx
++++ b/packages/widgets/src/health-monitoring/cluster/cluster-health.tsx
+@@ -67,7 +67,7 @@ export const ClusterHealthMonitoring = ({
+   const activeLXCs = healthData.lxcs.reduce(running, 0);
+   const activeStorage = healthData.storages.reduce(running, 0);
+ 
+-  const usedMem = healthData.nodes.reduce((sum, item) => (item.isRunning ? item.memory.used + sum : sum), 0);
++  const usedMem = healthData.nodes.reduce((sum, item) => (item.isRunning ? (item.memory.used ?? 0) + sum : sum), 0);
+   const maxMem = healthData.nodes.reduce((sum, item) => (item.isRunning ? item.memory.total + sum : sum), 0);
+   const maxCpu = healthData.nodes.reduce((sum, item) => (item.isRunning ? item.cpu.cores + sum : sum), 0);
+   const usedCpu = healthData.nodes.reduce(
+@@ -120,7 +120,7 @@ export const ClusterHealthMonitoring = ({
+               })}
+               isTiny={isTiny}
+             >
+-              <ResourceTable type="node" data={healthData.nodes} isTiny={isTiny} />
++              <ResourceTable type="node" data={healthData.nodes} isTiny={isTiny} showGpu={isAdvanced || options.gpu} />
+             </ResourceAccordionItem>
+           )}
+ 
+@@ -136,7 +136,7 @@ export const ClusterHealthMonitoring = ({
+               })}
+               isTiny={isTiny}
+             >
+-              <ResourceTable type="qemu" data={healthData.vms} isTiny={isTiny} />
++              <ResourceTable type="qemu" data={healthData.vms} isTiny={isTiny} showGpu={isAdvanced || options.gpu} />
+             </ResourceAccordionItem>
+           )}
+ 
+diff --git a/packages/widgets/src/health-monitoring/cluster/resource-popover.tsx b/packages/widgets/src/health-monitoring/cluster/resource-popover.tsx
+index a4dd121..e9cc464 100644
+--- a/packages/widgets/src/health-monitoring/cluster/resource-popover.tsx
++++ b/packages/widgets/src/health-monitoring/cluster/resource-popover.tsx
+@@ -8,6 +8,7 @@ import {
+   IconCpu,
+   IconDatabase,
+   IconDeviceLaptop,
++  IconDeviceDesktop,
+   IconHeartBolt,
+   IconNetwork,
+   IconQuestionMark,
+@@ -17,6 +18,7 @@ import dayjs from "dayjs";
+ import duration from "dayjs/plugin/duration";
+ 
+ import { capitalize } from "@homarr/common";
++import { invariantTechnicalLabels } from "@homarr/definitions";
+ import type { ComputeResource, Resource, StorageResource } from "@homarr/integrations/types";
+ import { useByteFormatter } from "@homarr/settings";
+ import { useI18n } from "@homarr/translation/client";
+@@ -40,7 +42,7 @@ export const ResourcePopover = ({ item, children }: PropsWithChildren<ResourcePo
+       }}
+     >
+       {children}
+-      <Popover.Dropdown>
++      <Popover.Dropdown maw="calc(100vw - 24px)">
+         <ResourceTypeEntryDetails item={item} />
+       </Popover.Dropdown>
+     </Popover>
+@@ -51,7 +53,7 @@ export const ResourceTypeEntryDetails = ({ item }: { item: Resource }) => {
+   const t = useI18n("widget.healthMonitoring.cluster.popover");
+   return (
+     <Stack gap={0}>
+-      <Group wrap="nowrap" align="start" justify="apart">
++      <Group align="start" justify="apart">
+         <Group wrap="nowrap" align="center">
+           <ResourceIcon type={item.type} size={35} />
+           <Stack gap={0}>
+@@ -86,7 +88,7 @@ const RightSection = ({ label, value }: RightSectionProps) => {
+       <Text fw={200} size="sm">
+         {label}
+       </Text>
+-      <Text c="dimmed" size="xs">
++      <Text c="dimmed" size="xs" maw={230} style={{ overflowWrap: "anywhere" }}>
+         {value}
+       </Text>
+     </Stack>
+@@ -96,19 +98,27 @@ const RightSection = ({ label, value }: RightSectionProps) => {
+ const ComputeResourceDetails = ({ item }: { item: ComputeResource }) => {
+   const t = useI18n("widget.healthMonitoring.cluster.popover.detail");
+   const { formatBytesPair } = useByteFormatter();
+-  const memory = formatBytesPair(item.memory.used, item.memory.total);
+-  const storage = formatBytesPair(item.storage.used, item.storage.total);
++  const memory = formatBytesPair(item.memory.used ?? 0, item.memory.total);
++  const storage =
++    item.storage.used != null && item.storage.total != null
++      ? formatBytesPair(item.storage.used, item.storage.total)
++      : null;
+   return (
+     <List>
+       <List.Item icon={<IconCpu size="var(--mantine-font-size-md)" />}>
+         {t("cpu")} - {item.cpu.cores}
+       </List.Item>
+       <List.Item icon={<IconBrain size="var(--mantine-font-size-md)" />}>
+-        {t("memory")} - {memory.used} / {memory.total}
++        {t("memory")} - {item.memory.used === null ? "—" : memory.used} / {memory.total}
+       </List.Item>
+       <List.Item icon={<IconDatabase size="var(--mantine-font-size-md)" />}>
+-        {t("storage")} - {storage.used} / {storage.total}
++        {t("storage")} - {storage ? `${storage.used} / ${storage.total}` : "—"}
+       </List.Item>
++      {item.gpuUsagePercent !== undefined && (
++        <List.Item icon={<IconDeviceDesktop size="var(--mantine-font-size-md)" />}>
++          {invariantTechnicalLabels.gpu} - {item.gpuUsagePercent === null ? "—" : `${item.gpuUsagePercent.toFixed(1)}%`}
++        </List.Item>
++      )}
+       <List.Item icon={<IconClockHour3 size="var(--mantine-font-size-md)" />}>
+         {t("uptime")} - {dayjs(dayjs().add(-item.uptime, "seconds")).fromNow(true)}
+       </List.Item>
+diff --git a/packages/widgets/src/health-monitoring/cluster/resource-table.tsx b/packages/widgets/src/health-monitoring/cluster/resource-table.tsx
+index 6e6924c..96c4f48 100644
+--- a/packages/widgets/src/health-monitoring/cluster/resource-table.tsx
++++ b/packages/widgets/src/health-monitoring/cluster/resource-table.tsx
+@@ -21,10 +21,12 @@ interface ResourceTableProps {
+   type: Resource["type"];
+   data: Resource[];
+   isTiny: boolean;
++  showGpu?: boolean;
+ }
+ 
+-export const ResourceTable = ({ type, data, isTiny }: ResourceTableProps) => {
++export const ResourceTable = ({ type, data, isTiny, showGpu = true }: ResourceTableProps) => {
+   const t = useI18n("widget.healthMonitoring");
++  const hasGpu = showGpu && data.some((item) => item.type !== "storage" && item.gpuUsagePercent !== undefined);
+   return (
+     <Table highlightOnHover>
+       <TableThead>
+@@ -47,6 +49,11 @@ export const ResourceTable = ({ type, data, isTiny }: ResourceTableProps) => {
+               {t("cluster.table.header.node")}
+             </TableTh>
+           ) : null}
++          {!isTiny && hasGpu && (
++            <TableTh ta="start" p={0}>
++              {invariantTechnicalLabels.gpu}
++            </TableTh>
++          )}
+         </TableTr>
+       </TableThead>
+       <TableTbody>
+@@ -77,8 +84,15 @@ export const ResourceTable = ({ type, data, isTiny }: ResourceTableProps) => {
+                       <>
+                         <TableTd style={{ whiteSpace: "nowrap" }}>{(item.cpu.utilization * 100).toFixed(1)}%</TableTd>
+                         <TableTd style={{ whiteSpace: "nowrap" }}>
+-                          {(item.memory.total ? (item.memory.used / item.memory.total) * 100 : 0).toFixed(1)}%
++                          {item.memory.used === null
++                            ? "—"
++                            : `${(item.memory.total ? (item.memory.used / item.memory.total) * 100 : 0).toFixed(1)}%`}
+                         </TableTd>
++                        {hasGpu && (
++                          <TableTd style={{ whiteSpace: "nowrap" }}>
++                            {item.gpuUsagePercent == null ? "—" : `${item.gpuUsagePercent.toFixed(1)}%`}
++                          </TableTd>
++                        )}
+                       </>
+                     )}
+                   </TableTr>
+diff --git a/packages/widgets/src/health-monitoring/index.ts b/packages/widgets/src/health-monitoring/index.ts
+index 39b7c03..3752d74 100644
+--- a/packages/widgets/src/health-monitoring/index.ts
++++ b/packages/widgets/src/health-monitoring/index.ts
+@@ -102,19 +102,19 @@ export const { definition, componentLoader } = createWidgetDefinition("healthMon
+         showUptime: {
+           shouldHide(_, integrationKinds) {
+             // Uptime is only shown on cluster health tab
+-            return !integrationKinds.includes("proxmox");
++            return !healthMonitoringClusterIntegrationKinds.some((kind) => integrationKinds.includes(kind));
+           },
+         },
+         sectionIndicatorRequirement: {
+           shouldHide(_, integrationKinds) {
+             // Section indicator requirement is only shown on cluster health tab
+-            return !integrationKinds.includes("proxmox");
++            return !healthMonitoringClusterIntegrationKinds.some((kind) => integrationKinds.includes(kind));
+           },
+         },
+         visibleClusterSections: {
+           shouldHide(_, integrationKinds) {
+             // Cluster sections are only shown on cluster health tab
+-            return !integrationKinds.includes("proxmox");
++            return !healthMonitoringClusterIntegrationKinds.some((kind) => integrationKinds.includes(kind));
+           },
+         },
+         tabOrder: {
+@@ -126,8 +126,9 @@ export const { definition, componentLoader } = createWidgetDefinition("healthMon
+         },
+         defaultTab: {
+           shouldHide(_, integrationKinds) {
+-            // The system/cluster tabs only render for Proxmox, so the default tab choice does nothing otherwise
+-            return !integrationKinds.includes("proxmox");
++            const hasSystem = healthMonitoringSystemIntegrationKinds.some((kind) => integrationKinds.includes(kind));
++            const hasCluster = healthMonitoringClusterIntegrationKinds.some((kind) => integrationKinds.includes(kind));
++            return !hasSystem || !hasCluster;
+           },
+         },
+       },
+diff --git a/packages/widgets/src/health-monitoring/integration-selection.ts b/packages/widgets/src/health-monitoring/integration-selection.ts
+index 2ab8baf..6a3f783 100644
+--- a/packages/widgets/src/health-monitoring/integration-selection.ts
++++ b/packages/widgets/src/health-monitoring/integration-selection.ts
+@@ -11,6 +11,6 @@ const clusterIntegrationKinds = new Set<IntegrationKind>(healthMonitoringCluster
+ 
+ export const partitionHealthMonitoringIntegrations = (integrations: HealthMonitoringIntegration[]) => ({
+   clusterIntegrationIds: integrations.filter(({ kind }) => clusterIntegrationKinds.has(kind)).map(({ id }) => id),
+-  // Mock implements both contracts and remains visible in both views.
++  // Providers such as Hyper-V and Mock can implement both contracts.
+   systemIntegrationIds: integrations.filter(({ kind }) => systemIntegrationKinds.has(kind)).map(({ id }) => id),
+ });
+diff --git a/packages/widgets/src/health-monitoring/rings/gpu-ring.tsx b/packages/widgets/src/health-monitoring/rings/gpu-ring.tsx
+index e2a90ef..9eae8ca 100644
+--- a/packages/widgets/src/health-monitoring/rings/gpu-ring.tsx
++++ b/packages/widgets/src/health-monitoring/rings/gpu-ring.tsx
+@@ -9,7 +9,7 @@ interface GpuRingProps {
+   gpu: {
+     gpuId: string;
+     name: string;
+-    memoryUtilization: number;
++    memoryUtilization: number | null;
+     processorUtilization: number;
+     temperature: number | null;
+     fanSpeed: number | null;
+@@ -36,7 +36,7 @@ export const GpuRing = ({ gpu, isTiny, fahrenheit, ariaLabel }: GpuRingProps) =>
+           <Text size="xs" fw={600}>
+             {gpu.name}
+           </Text>
+-          <Text size="xs">VRAM: {gpu.memoryUtilization.toFixed(1)}%</Text>
++          {gpu.memoryUtilization != null && <Text size="xs">VRAM: {gpu.memoryUtilization.toFixed(1)}%</Text>}
+           {tempDisplay && <Text size="xs">Temp: {tempDisplay}</Text>}
+           {gpu.fanSpeed != null && <Text size="xs">Fan: {gpu.fanSpeed} RPM</Text>}
+         </Stack>
+diff --git a/packages/widgets/src/health-monitoring/system-health.tsx b/packages/widgets/src/health-monitoring/system-health.tsx
+index 8004479..6401696 100644
+--- a/packages/widgets/src/health-monitoring/system-health.tsx
++++ b/packages/widgets/src/health-monitoring/system-health.tsx
+@@ -124,7 +124,7 @@ export const SystemHealthMonitoring = ({
+             formatBytes,
+             formatBytesPair,
+           );
+-          const hasAttentionState = healthInfo.rebootRequired || healthInfo.availablePkgUpdates > 0;
++          const hasAttentionState = healthInfo.rebootRequired || (healthInfo.availablePkgUpdates ?? 0) > 0;
+           return (
+             <Stack
+               gap="sm"
+@@ -152,11 +152,13 @@ export const SystemHealthMonitoring = ({
+                   inline
+                   processing
+                   styles={{ indicator: { pointerEvents: "none" } }}
+-                  color={healthInfo.rebootRequired ? "red" : healthInfo.availablePkgUpdates > 0 ? "blue" : "gray"}
++                  color={
++                    healthInfo.rebootRequired ? "red" : (healthInfo.availablePkgUpdates ?? 0) > 0 ? "blue" : "gray"
++                  }
+                   position="top-end"
+                   size={16}
+-                  label={healthInfo.availablePkgUpdates > 0 ? healthInfo.availablePkgUpdates : undefined}
+-                  disabled={!healthInfo.rebootRequired && healthInfo.availablePkgUpdates === 0}
++                  label={(healthInfo.availablePkgUpdates ?? 0) > 0 ? healthInfo.availablePkgUpdates : undefined}
++                  disabled={!healthInfo.rebootRequired && (healthInfo.availablePkgUpdates ?? 0) === 0}
+                 >
+                   <ActionIcon
+                     className={combineClasses("health-monitoring-information-icon-avatar", actionTargetClasses.root)}
+@@ -366,18 +368,22 @@ const SystemInformationList = ({
+           {healthInfo.loadAverage["15min"]}%
+         </List.Item>
+       )}
+-      <List.Item
+-        className="health-monitoring-information-updates"
+-        icon={<IconPackages size={iconSizeProp} style={iconStyle} />}
+-      >
+-        {t("popover.updatesAvailable", { count: healthInfo.availablePkgUpdates })}
+-      </List.Item>
+-      <List.Item
+-        className="health-monitoring-information-reboot"
+-        icon={<IconRefreshAlert size={iconSizeProp} style={iconStyle} />}
+-      >
+-        {healthInfo.rebootRequired ? t("popover.rebootRequired") : t("popover.rebootNotRequired")}
+-      </List.Item>
++      {healthInfo.availablePkgUpdates != null && (
++        <List.Item
++          className="health-monitoring-information-updates"
++          icon={<IconPackages size={iconSizeProp} style={iconStyle} />}
++        >
++          {t("popover.updatesAvailable", { count: healthInfo.availablePkgUpdates })}
++        </List.Item>
++      )}
++      {healthInfo.rebootRequired != null && (
++        <List.Item
++          className="health-monitoring-information-reboot"
++          icon={<IconRefreshAlert size={iconSizeProp} style={iconStyle} />}
++        >
++          {healthInfo.rebootRequired ? t("popover.rebootRequired") : t("popover.rebootNotRequired")}
++        </List.Item>
++      )}
+     </List>
+   );
+ };
 diff --git a/packages/widgets/src/refetch-intervals.ts b/packages/widgets/src/refetch-intervals.ts
 index e7751e1..b6b6e6b 100644
 --- a/packages/widgets/src/refetch-intervals.ts

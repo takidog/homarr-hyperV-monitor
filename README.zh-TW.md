@@ -8,22 +8,23 @@
 
 [English](README.md) · **繁體中文**
 
-原生 **Hyper-V integration 與 widget**，搭配 Windows 上可設定的 **Go agent**。從主機取得各 VM 的資源使用情況，不需要在 guest 內另外安裝 agent。
+接入 Homarr 原生**系統健康監測 widget 的 Hyper-V integration**，搭配 Windows 上可設定的 **Go agent**。從主機取得各 VM 的資源使用情況，不需要在 guest 內另外安裝 agent。
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" width="282" alt="Hyper-V 小工具顯示主機與 VM 的 CPU、記憶體、狀態及運行時間">
 </p>
 
-<p align="center"><sub>專案作者提供的 v0.1 截圖；v0.2 在此版面加入 GPU 讀值。</sub></p>
+<p align="center"><sub>專案作者提供的獨立 widget 截圖。目前建議使用 Homarr 原生「系統健康監測」widget；獨立版仍可使用。</sub></p>
 
 [快速開始](#快速開始) · [GPU-PV 監測](#gpu-pv-監測) · [Agent 設定](agent/README.md) · [下載](https://github.com/takidog/homarr-hyperV-monitor/releases)
 
 ## 功能
 
+- **原生 Homarr 介面：**「系統」分頁顯示主機儀表；「叢集」分頁顯示主機、VM、磁碟清單，支援 GPU-PV 用量。
 - **主機指標：** CPU（包含 guest 負載）、RAM、GPU 使用率、uptime 與執行中的 VM 數量。
 - **個別 VM：** CPU、記憶體需求／配置、GPU-PV 使用率、狀態、uptime 與配置細節。
-- **自訂 Host 名稱：** 每個 widget 可獨立命名，留空時使用 Windows 主機名稱。
-- **顯示選項：** 精簡／進階檢視、隱藏停止的 VM、選擇顯示主機磁碟容量；支援英文與繁體中文。
+- **自訂 Host 名稱：** 原生 widget 使用 integration 名稱；獨立 widget 另外保留每個 widget 的主機命名選項。
+- **顯示選項：** 原生精簡／進階檢視及叢集區段選擇；支援英文與繁體中文，既有獨立 widget 仍相容。
 - **獨立 Windows agent：** 單一 Go exe，CLI 設定保存、token 認證、HTTPS 與可選的開機啟動。
 - **資料新鮮度：** 自動輪詢、逾時及 unavailable 狀態，不將過期數值當成目前用量。
 
@@ -36,7 +37,7 @@
 | Homarr | 本專案自訂 image，基於 **Homarr 2.10.1**，提供 `linux/amd64` |
 | Agent | Windows `amd64`；不需要 Go runtime 或獨立的 collector 腳本 |
 
-這是獨立維護的擴充，不是 Homarr 官方整合，也不是可從 Workshop 匯入的 widget。原生 integration 與 widget 必須一同建置進 Homarr。
+這是獨立維護的擴充，不是 Homarr 官方整合，也不是可從 Workshop 匯入的 widget。integration adapter 需要建置進 Homarr；官方原版尚未包含這個擴充。
 
 ## 快速開始
 
@@ -86,7 +87,12 @@ docker compose up -d --no-deps homarr
 
 ### 3. 連接 widget
 
-在 Homarr 建立 **Hyper-V** integration，填入 agent 可連線的 origin，以及設定檔中的 `token`。加入 **Hyper-V** widget、選擇 integration，再設定需要的 **主機顯示名稱**。每台 host 使用各自的 integration。
+在 Homarr 建立 **Hyper-V** integration，填入 agent 可連線的 origin，以及設定檔中的 `token`。加入原生**系統健康監測** widget 並選擇 integration。每台 host 使用各自的 integration，以 integration 名稱作為主機顯示名稱。
+
+- **系統：** CPU、RAM、可取得的主機 GPU 儀表與本機磁碟。
+- **叢集：** 主機及個別 VM 的 CPU、RAM、GPU-PV 使用率，點擊資料列可看詳細資訊。Hyper-V 沒有 LXC，可在顯示區段中隱藏 **LXCs**。
+
+Agent **v0.2.0** 已提供所需資料，這次 UI 更新不需重新安裝 agent。既有獨立 Hyper-V widget 仍可使用，並保留個別主機命名與額外 VM 配置資訊。
 
 帳號必須有建立 integration 及使用該 integration 的權限。如果管理區沒有「整合」，請檢查群組權限。容器裡的 `localhost` 指的是容器，不是 Windows 主機。
 
@@ -96,7 +102,7 @@ Agent 讀取 Windows **GPU Engine** 計數器，以 `Msvm_ComputerSystem.Process
 
 - **主機 GPU：** 主機所有 GPU 中，最忙碌實體 engine 的用量，包含 guest 負載。
 - **VM GPU：** 歸屬於該 VM worker process 的活動；是實體 engine 使用率，**不是 GPU 分割區配額使用率**。
-- **無法取得：** 驅動計數器缺失或 worker process 無法對應時顯示 `—`，不假造 0%。GPU 偵測失敗不影響 CPU／RAM 採集。
+- **無法取得：** VM 計數器缺失或 worker process 無法對應時顯示 `—`，不假造 0%。原生主機 GPU 儀表在沒有計數器時隱藏；不顯示未回報的 VRAM。GPU 偵測失敗不影響 CPU／RAM 採集。
 - **停止的 VM：** 配置的 GPU-PV 配接器數量仍保留；Off／Saved VM 的 GPU 用量為 0%。沒有 GPU-PV 配接器的 VM 不顯示 GPU 使用率欄位。
 
 計數器是否可用及如何歸屬取決於 Windows 與驅動程式，已在具有 GPU-PV 的 Windows Hyper-V 主機驗證。本功能不宣稱支援 DDA 直通 GPU 或每台 VM 的 VRAM 用量。GPU Engine 計數器是整數百分比，個別 context 的微小用量可能向下取整。
